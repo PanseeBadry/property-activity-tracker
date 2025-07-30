@@ -29,10 +29,12 @@ export class SalesRepService {
       .find({
         timestamp: { $gt: rep.lastOnline },
       })
-      .sort({ timestamp: 1 });
+      .sort({ timestamp: 1 })
+      .populate('salesRepId propertyId');
 
     this.socketGateway.sendReplayActivities(socket, missedActivities);
   }
+
   async setOnline(salesRepId: string) {
     await this.salesRepModel.findByIdAndUpdate(salesRepId, {
       isOnline: true,

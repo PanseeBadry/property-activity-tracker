@@ -63,14 +63,15 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const { salesRepId } = data;
 
-    // Update status to online
+    // ✅ Send replay BEFORE changing status
+    await this.salesRepService.sendReplayToUser(salesRepId, client);
+
+    // ✅ Update status to online AFTER replay
     await this.salesRepService.setOnline(salesRepId);
 
     // Save user connection
     this.connectedUsers.set(client.id, salesRepId);
 
     console.log(`🟢 SalesRep is online: ${salesRepId}`);
-
-    await this.salesRepService.sendReplayToUser(salesRepId, client);
   }
 }

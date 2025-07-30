@@ -4,16 +4,19 @@ import {
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { ModuleRef } from '@nestjs/core';
 import { SalesRepService } from 'src/sales-rep/sales-rep.service';
 
 @WebSocketGateway({ cors: true })
-export class SocketGateway {
+export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
+  private connectedUsers = new Map<string, string>(); // socket.id => salesRepId
   private salesRepService: SalesRepService;
 
   constructor(private moduleRef: ModuleRef) {}
@@ -25,10 +28,19 @@ export class SocketGateway {
   }
 
   handleConnection(client: Socket) {
-    console.log(`Client connected: ${client.id}`);
+    console.log(`🔌 Client connected: ${client.id}`);
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
+    const salesRepId = this.connectedUsers.get(client.id);
+    if (salesRepId) {
+      console.log(`🔴 SalesRep disconnected: ${salesRepId}`);
+
+      await this.salesRepService.setOffline(salesRepId);
+
+      this.connectedUsers.delete(client.id);
+    }
+
     console.log(`Client disconnected: ${client.id}`);
   }
 
@@ -49,6 +61,16 @@ export class SocketGateway {
     @MessageBody() data: { salesRepId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    await this.salesRepService.sendReplayToUser(data.salesRepId, client);
+    const { salesRepId } = data;
+
+    // Update status to online
+    await this.salesRepService.setOnline(salesRepId);
+
+    // Save user connection
+    this.connectedUsers.set(client.id, salesRepId);
+
+    console.log(`🟢 SalesRep is online: ${salesRepId}`);
+
+    await this.salesRepService.sendReplayToUser(salesRepId, client);
   }
 }

@@ -16,7 +16,6 @@ export class SalesRepService {
     private socketGateway: SocketGateway,
   ) {}
 
-  // 1. Get all sales reps
   async findAll(): Promise<SalesRep[]> {
     return this.salesRepModel.find();
   }
@@ -33,5 +32,17 @@ export class SalesRepService {
       .sort({ timestamp: 1 });
 
     this.socketGateway.sendReplayActivities(socket, missedActivities);
+  }
+  async setOnline(salesRepId: string) {
+    await this.salesRepModel.findByIdAndUpdate(salesRepId, {
+      isOnline: true,
+    });
+  }
+
+  async setOffline(salesRepId: string) {
+    await this.salesRepModel.findByIdAndUpdate(salesRepId, {
+      isOnline: false,
+      lastOnline: new Date(),
+    });
   }
 }

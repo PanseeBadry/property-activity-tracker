@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -8,6 +8,8 @@ import { PropertyModule } from './property/property.module';
 import { ActivityModule } from './activity/activity.module';
 import { AuthModule } from './auth/auth.module';
 import { SocketModule } from './socket/socket.module';
+import { SessionModule } from './session/session.module';
+import { SessionValidationMiddleware } from './session/middleware/session-validation.middleware';
 
 @Module({
   imports: [
@@ -23,6 +25,7 @@ import { SocketModule } from './socket/socket.module';
       inject: [ConfigService],
     }),
     AuthModule,
+    SessionModule,
     SalesRepModule,
     PropertyModule,
     ActivityModule,
@@ -31,4 +34,10 @@ import { SocketModule } from './socket/socket.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(SessionValidationMiddleware)
+      .forRoutes('*'); // Apply to all routes
+  }
+}

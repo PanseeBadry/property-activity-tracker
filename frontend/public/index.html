@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -5,6 +6,7 @@
     <title>Property Activity Tracker</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
 </head>
 <body>
     <!-- Header -->
@@ -12,16 +14,66 @@
         <div class="container">
             <div class="header-content">
                 <h1><i class="fas fa-home"></i> Property Activity Tracker</h1>
-                <div class="user-info" id="userInfo" style="display: none;">
-                    <span class="user-name" id="userName"></span>
-                    <span class="user-score" id="userScore">Score: 0</span>
-                    <button class="btn btn-secondary" id="logoutBtn">
-                        <i class="fas fa-sign-out-alt"></i> Logout
+                <div class="header-actions">
+                    <!-- Notification Icon -->
+                    <button class="notification-icon" id="notificationBtn" title="Notifications">
+                        <i class="fas fa-bell"></i>
+                        <span class="badge" id="notificationBadge" style="display: none;">0</span>
                     </button>
+                    
+                    <!-- Replay Icon -->
+                    <button class="replay-icon" id="replayBtn" title="Activity Replay">
+                        <i class="fas fa-history"></i>
+                        <span class="badge" id="replayBadge" style="display: none;">0</span>
+                    </button>
+                    
+                    <div class="user-info" id="userInfo" style="display: none;">
+                        <span class="user-name" id="userName"></span>
+                        <span class="user-score" id="userScore">Score: 0</span>
+                        <button class="btn btn-secondary" id="logoutBtn">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
     </header>
+
+    <!-- Notification Panel -->
+    <div class="notification-panel" id="notificationPanel">
+        <div class="panel-header">
+            <span><i class="fas fa-bell"></i> Notifications</span>
+            <button class="btn-close" onclick="closeNotificationPanel()">×</button>
+        </div>
+        <div class="panel-body" id="notificationList">
+            <div class="empty-panel">
+                <i class="fas fa-bell-slash"></i>
+                <p>No notifications</p>
+            </div>
+        </div>
+        <div class="panel-actions">
+            <button class="btn-small btn-clear" onclick="clearAllNotifications()">Clear All</button>
+            <button class="btn-small btn-close" onclick="closeNotificationPanel()">Close</button>
+        </div>
+    </div>
+
+    <!-- Replay Panel -->
+    <div class="replay-panel" id="replayPanel">
+        <div class="panel-header">
+            <span><i class="fas fa-history"></i> Activity Replay</span>
+            <button class="btn-close" onclick="closeReplayPanel()">×</button>
+        </div>
+        <div class="panel-body" id="replayList">
+            <div class="empty-panel">
+                <i class="fas fa-clock"></i>
+                <p>No missed activities</p>
+            </div>
+        </div>
+        <div class="panel-actions">
+            <button class="btn-small btn-clear" onclick="clearReplayActivities()">Clear All</button>
+            <button class="btn-small btn-close" onclick="closeReplayPanel()">Close</button>
+        </div>
+    </div>
 
     <!-- Login Form -->
     <div class="login-overlay" id="loginOverlay">

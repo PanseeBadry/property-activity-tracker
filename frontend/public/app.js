@@ -1,14 +1,28 @@
 const state = {
-    token: localStorage.getItem('token') || null,
-    user: JSON.parse(localStorage.getItem('user') || 'null'),
+    token: null,
+    user: null,
     socket: null,
     currentTab: 'dashboard',
     data: {
         activities: [],
         properties: [],
         salesReps: []
-    }
+    },
+    notifications: [],
+    replayActivities: [],
+    unreadNotifications: 0,
+    missedActivities: 0
 };
+
+function initializeState() {
+   state.token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+    state.user = userData ? JSON.parse(userData) : null;
+    state.notifications = [];
+    state.replayActivities = [];
+    state.unreadNotifications = 0;
+    state.missedActivities = 0;
+}
 
 // API Configuration
 const API_BASE = 'http://localhost:3000';
@@ -21,11 +35,9 @@ const api = {
             },
             ...options
         };
-        // console.log("options", options);
 
         try {
             const response = await fetch(`${API_BASE}${endpoint}`, config);
-            // console.log(`API Request: ${endpoint}`, config);
             
             if (response.status === 401) {
                 this.handleUnauthorized();
@@ -64,7 +76,6 @@ const api = {
 
     // Sales Reps endpoints
     async getSalesReps() {
-        console.log("getSalesReps called",  this.request('/sales-reps'));
         return this.request('/sales-reps');
     },
 
@@ -88,7 +99,6 @@ const api = {
 
     // Properties endpoints
     async getProperties() {
-        // console.log("getProperties called", await this.request('/property'));
         return await this.request('/property');
     },
 
@@ -139,6 +149,190 @@ const api = {
     }
 };
 
+// Notification Management
+function addNotification(title, message, type = 'info') {
+    const notification = {
+        id: Date.now() + Math.random(),
+        title,
+        message,
+        type,
+        timestamp: new Date(),
+        read: false
+    };
+    
+    state.notifications.unshift(notification);
+    state.unreadNotifications++;
+    updateNotificationBadge();
+    
+    // Keep only last 50 notifications
+    if (state.notifications.length > 50) {
+        state.notifications = state.notifications.slice(0, 50);
+    }
+}
+
+function markNotificationAsRead(id) {
+    const notification = state.notifications.find(n => n.id === id);
+    if (notification && !notification.read) {
+        notification.read = true;
+        state.unreadNotifications--;
+        updateNotificationBadge();
+    }
+}
+
+function clearAllNotifications() {
+    state.notifications = [];
+    state.unreadNotifications = 0;
+    updateNotificationBadge();
+    renderNotifications();
+}
+
+function updateNotificationBadge() {
+    const badge = document.getElementById('notificationBadge');
+    if (state.unreadNotifications > 0) {
+        badge.textContent = state.unreadNotifications > 99 ? '99+' : state.unreadNotifications;
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function renderNotifications() {
+    const container = document.getElementById('notificationList');
+    
+    if (state.notifications.length === 0) {
+        container.innerHTML = `
+            <div class="empty-panel">
+                <i class="fas fa-bell-slash"></i>
+                <p>No notifications</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = state.notifications.map(notification => `
+        <div class="notification-item ${!notification.read ? 'unread' : ''}" 
+             onclick="markNotificationAsRead(${notification.id})">
+            <div class="notification-title">${notification.title}</div>
+            <div class="notification-text">${notification.message}</div>
+            <div class="notification-time">${formatDateTime(notification.timestamp)}</div>
+        </div>
+    `).join('');
+}
+
+// Replay Activities Management
+function addReplayActivity(activity) {
+    const replayItem = {
+        id: activity._id || Date.now() + Math.random(),
+        activity,
+        timestamp: new Date(activity.timestamp),
+        viewed: false
+    };
+    
+    state.replayActivities.unshift(replayItem);
+    state.missedActivities++;
+    updateReplayBadge();
+    
+    // Keep only last 100 replay activities
+    if (state.replayActivities.length > 100) {
+        state.replayActivities = state.replayActivities.slice(0, 100);
+    }
+}
+
+function markReplayAsViewed(id) {
+    const replayItem = state.replayActivities.find(r => r.id === id);
+    if (replayItem && !replayItem.viewed) {
+        replayItem.viewed = true;
+        state.missedActivities--;
+        updateReplayBadge();
+    }
+}
+
+function clearReplayActivities() {
+    state.replayActivities = [];
+    state.missedActivities = 0;
+    updateReplayBadge();
+    renderReplayActivities();
+}
+
+function updateReplayBadge() {
+    const badge = document.getElementById('replayBadge');
+    if (state.missedActivities > 0) {
+        badge.textContent = state.missedActivities > 99 ? '99+' : state.missedActivities;
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function renderReplayActivities() {
+    const container = document.getElementById('replayList');
+    
+    if (state.replayActivities.length === 0) {
+        container.innerHTML = `
+            <div class="empty-panel">
+                <i class="fas fa-clock"></i>
+                <p>No missed activities</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = state.replayActivities.map(replayItem => `
+        <div class="replay-item ${!replayItem.viewed ? 'missed' : ''}" 
+             onclick="markReplayAsViewed(${replayItem.id})">
+            <div class="notification-title">
+                <i class="fas ${getActivityIcon(replayItem.activity.activityType)}"></i>
+                ${replayItem.activity.activityType} Activity
+            </div>
+            <div class="replay-text">
+                ${replayItem.activity.propertyId?.name || 'Unknown Property'} - 
+                ${replayItem.activity.salesRepId?.name || 'Unknown Rep'}
+                ${replayItem.activity.note ? `<br><small>${replayItem.activity.note}</small>` : ''}
+            </div>
+            <div class="replay-time">${formatDateTime(replayItem.timestamp)}</div>
+        </div>
+    `).join('');
+}
+
+// Panel Management
+function toggleNotificationPanel() {
+    const panel = document.getElementById('notificationPanel');
+    const replayPanel = document.getElementById('replayPanel');
+    
+    // Close replay panel if open
+    replayPanel.style.display = 'none';
+    
+    if (panel.style.display === 'block') {
+        panel.style.display = 'none';
+    } else {
+        panel.style.display = 'block';
+        renderNotifications();
+    }
+}
+
+function toggleReplayPanel() {
+    const panel = document.getElementById('replayPanel');
+    const notificationPanel = document.getElementById('notificationPanel');
+    
+    // Close notification panel if open
+    notificationPanel.style.display = 'none';
+    
+    if (panel.style.display === 'block') {
+        panel.style.display = 'none';
+    } else {
+        panel.style.display = 'block';
+        renderReplayActivities();
+    }
+}
+
+function closeNotificationPanel() {
+    document.getElementById('notificationPanel').style.display = 'none';
+}
+
+function closeReplayPanel() {
+    document.getElementById('replayPanel').style.display = 'none';
+}
+
 // WebSocket Management
 function initializeSocket() {
     if (!state.token || state.socket) return;
@@ -153,23 +347,49 @@ function initializeSocket() {
     });
 
     state.socket.on('activity:new', (activity) => {
-        showNotification(`New activity: ${activity.activityType} by ${activity.salesRepId.name}`, 'info');
+        const message = `New activity: ${activity.activityType} by ${activity.salesRepId.name}`;
+        
+        // Add to notifications
+        addNotification('New Activity', message, 'info');
+        
+        // Also show as toast notification
+        showNotification(message, 'info');
+        
         loadData();
     });
 
     state.socket.on('activity:replay', (activities) => {
         if (activities.length > 0) {
+            // Add each activity to replay list
+            activities.forEach(activity => {
+                addReplayActivity(activity);
+            });
+            
+            // Add notification about missed activities
+            addNotification(
+                'Missed Activities', 
+                `You have ${activities.length} missed activities while you were offline`, 
+                'warning'
+            );
+            
+            // Show toast notification
             showNotification(`You have ${activities.length} missed activities`, 'info');
+            
             loadData();
         }
     });
 
     state.socket.on('notification', (message) => {
+        // Add to notifications panel
+        addNotification('System Notification', message, 'success');
+        
+        // Also show as toast
         showNotification(message, 'success');
     });
 
     state.socket.on('disconnect', () => {
         console.log('Disconnected from server');
+        addNotification('Connection', 'Disconnected from server', 'warning');
     });
 }
 
@@ -184,15 +404,14 @@ function disconnectSocket() {
 async function login(name) {
     try {
         const response = await api.login(name);
-        console.log("login response", response);
         if (response) {
             state.token = response.access_token;
             state.user = response.salesRep;
-            
             localStorage.setItem('token', state.token);
             localStorage.setItem('user', JSON.stringify(state.user));
-            
             showNotification('Login successful!', 'success');
+            addNotification('Login', `Welcome back, ${state.user.name}!`, 'success');
+            
             hideLoginOverlay();
             updateUserInfo();
             initializeSocket();
@@ -200,6 +419,7 @@ async function login(name) {
         }
     } catch (error) {
         showNotification('Login failed', 'error');
+        addNotification('Login Failed', 'Unable to authenticate user', 'error');
     }
 }
 
@@ -209,15 +429,26 @@ async function logout() {
             await api.logout();
         }
     } finally {
-        state.token = null;
-        state.user = null;
+        addNotification('Logout', 'You have been logged out', 'info');
+
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+
+        state.token = null;
+        state.user = null;
+        state.notifications = [];
+        state.replayActivities = [];
+        state.unreadNotifications = 0;
+        state.missedActivities = 0;
+
         disconnectSocket();
         showLoginOverlay();
         updateUserInfo();
+        updateNotificationBadge();
+        updateReplayBadge();
     }
 }
+
 
 function showLoginOverlay() {
     document.getElementById('loginOverlay').style.display = 'flex';
@@ -274,7 +505,6 @@ async function loadProperties() {
 
 async function loadSalesReps() {
     const salesReps = await api.getSalesReps();
-    console.log("salesReps", salesReps);
     if (salesReps) {
         state.data.salesReps = salesReps;
         renderSalesReps();
@@ -288,7 +518,6 @@ function updateCurrentUserScore() {
         const currentUser = state.data.salesReps.find(rep => rep._id === state.user._id);
         if (currentUser) {
             state.user.score = currentUser.score;
-            localStorage.setItem('user', JSON.stringify(state.user));
             updateUserInfo();
         }
     }
@@ -297,7 +526,6 @@ function updateCurrentUserScore() {
 // Dashboard
 function updateDashboard() {
     document.getElementById('totalActivities').textContent = state.data.activities.length;
-    // document.getElementById('totalProperties').textContent = state.data.properties.length;
     document.getElementById('totalSalesReps').textContent = state.data.salesReps.length;
     document.getElementById('currentScore').textContent = state.user ? state.user.score : 0;
 }
@@ -388,15 +616,16 @@ async function createActivity(formData) {
         activityType: formData.get('activityType'),
         timestamp: new Date(),
         location: {
-            lat: parseFloat(formData.get('lat')),
-            lng: parseFloat(formData.get('lng'))
+            lat: parseFloat(formData.get('lat')) || 0,
+            lng: parseFloat(formData.get('lng')) || 0
         },
         note: formData.get('note') || undefined
     };
 
     const response = await api.createActivity(data);
     if (response) {
-        showNotification('Activity created successfully!', 'success');
+        // showNotification('Activity created successfully!', 'success');
+        // addNotification('Activity Created', `${data.activityType} activity created successfully`, 'success');
         closeModal('activityModal');
         await loadData();
     }
@@ -407,6 +636,7 @@ async function deleteActivity(id) {
         const response = await api.deleteActivity(id);
         if (response) {
             showNotification('Activity deleted successfully!', 'success');
+            addNotification('Activity Deleted', 'Activity has been removed', 'info');
             await loadData();
         }
     }
@@ -469,7 +699,7 @@ async function createProperty(formData) {
     const response = await api.createProperty(data);
     if (response) {
         showNotification('Property created successfully!', 'success');
-        // closeModal('propertyModal');
+        addNotification('Property Created', `${data.propertyName} has been added`, 'success');
         await loadData();
     }
 }
@@ -479,6 +709,7 @@ async function deleteProperty(id) {
         const response = await api.deleteProperty(id);
         if (response) {
             showNotification('Property deleted successfully!', 'success');
+            addNotification('Property Deleted', 'Property has been removed', 'info');
             await loadData();
         }
     }
@@ -492,7 +723,6 @@ function renderSalesReps() {
         container.innerHTML = '<div class="empty-state"><i class="fas fa-users"></i><p>No sales reps found</p></div>';
         return;
     }
-    console.log("salesRepsList", state.data.salesReps);
 
     const tableHTML = `
         <table class="table">
@@ -508,7 +738,6 @@ function renderSalesReps() {
             <tbody>
                 ${state.data.salesReps
                     .filter(rep => rep._id !== state.user._id)
-
                     .map(rep => `
                     <tr>
                         <td><strong>${rep.name}</strong></td>
@@ -546,6 +775,7 @@ async function createSalesRep(formData) {
     const response = await api.createSalesRep(data);
     if (response) {
         showNotification('Sales rep created successfully!', 'success');
+        addNotification('Sales Rep Created', `${data.name} has been added to the team`, 'success');
         closeModal('salesRepModal');
         await loadData();
     }
@@ -556,6 +786,7 @@ async function deleteSalesRep(id) {
         const response = await api.deleteSalesRep(id);
         if (response) {
             showNotification('Sales rep deleted successfully!', 'success');
+            addNotification('Sales Rep Deleted', 'Sales representative has been removed', 'info');
             await loadData();
         }
     }
@@ -566,7 +797,6 @@ function updatePropertySelects() {
     const selects = document.querySelectorAll('#activityProperty');
     selects.forEach(select => {
         const currentValue = select.value;
-        console.log("here", state.data.properties);
         select.innerHTML = '<option value="">Select Property</option>' +
             state.data.properties.map(property => 
                 `<option value="${property._id}">${property.name}</option>`
@@ -579,12 +809,10 @@ function updateSalesRepSelects() {
     const selects = document.querySelectorAll('#salesRepFilter');
     selects.forEach(select => {
         const currentValue = select.value;
-        // console.log("here", state.data.salesReps);
         select.innerHTML = '<option value="">All Sales Reps</option>' +
             state.data.salesReps.map(rep => 
                 `<option value="${rep._id}">${rep.name}</option>`
             ).join('');
-
         if (currentValue) select.value = currentValue;
     });
 }
@@ -610,13 +838,11 @@ function formatDateTime(dateString) {
 
 // Tab Management
 function switchTab(tabName) {
-    // Update tab buttons
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.remove('active');
     });
     document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
 
-    // Update tab content
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.remove('active');
     });
@@ -632,12 +858,11 @@ function openModal(modalId) {
 
 function closeModal(modalId) {
     document.getElementById(modalId).classList.remove('show');
-    // Reset form if exists
     const form = document.querySelector(`#${modalId} form`);
     if (form) form.reset();
 }
 
-// Notifications
+// Notifications (Toast notifications)
 function showNotification(message, type = 'info') {
     const container = document.getElementById('notifications');
     const notification = document.createElement('div');
@@ -656,15 +881,25 @@ function showNotification(message, type = 'info') {
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize state
+    initializeState();
+    
+    // Check if user is already logged in (in this case, always show login)
     // Check if user is already logged in
-    if (state.token && state.user) {
-        hideLoginOverlay();
-        updateUserInfo();
-        initializeSocket();
-        loadData();
-    } else {
-        showLoginOverlay();
-    }
+const savedToken = localStorage.getItem('token');
+const savedUser = localStorage.getItem('user');
+
+if (savedToken && savedUser) {
+    state.token = savedToken;
+    state.user = JSON.parse(savedUser);
+    updateUserInfo();
+    initializeSocket();
+    loadData();
+    hideLoginOverlay();
+} else {
+    showLoginOverlay();
+}
+
 
     // Login form
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -675,6 +910,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Logout button
     document.getElementById('logoutBtn').addEventListener('click', logout);
+
+    // Notification and Replay buttons
+    document.getElementById('notificationBtn').addEventListener('click', toggleNotificationPanel);
+    document.getElementById('replayBtn').addEventListener('click', toggleReplayPanel);
 
     // Tab navigation
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -693,12 +932,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // New item buttons
     document.getElementById('newActivityBtn').addEventListener('click', () => openModal('activityModal'));
-    // document.getElementById('newPropertyBtn').addEventListener('click', () => openModal('propertyModal'));
     document.getElementById('newSalesRepBtn').addEventListener('click', () => openModal('salesRepModal'));
 
     // Cancel buttons
     document.getElementById('cancelActivity').addEventListener('click', () => closeModal('activityModal'));
-    // document.getElementById('cancelProperty').addEventListener('click', () => closeModal('propertyModal'));
     document.getElementById('cancelSalesRep').addEventListener('click', () => closeModal('salesRepModal'));
 
     // Form submissions
@@ -741,13 +978,29 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Close modals when clicking outside
+    // Close modals and panels when clicking outside
     document.querySelectorAll('.modal').forEach(modal => {
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
                 closeModal(modal.id);
             }
         });
+    });
+
+    // Close panels when clicking outside
+    document.addEventListener('click', (e) => {
+        const notificationPanel = document.getElementById('notificationPanel');
+        const replayPanel = document.getElementById('replayPanel');
+        const notificationBtn = document.getElementById('notificationBtn');
+        const replayBtn = document.getElementById('replayBtn');
+        
+        if (!notificationPanel.contains(e.target) && !notificationBtn.contains(e.target)) {
+            notificationPanel.style.display = 'none';
+        }
+        
+        if (!replayPanel.contains(e.target) && !replayBtn.contains(e.target)) {
+            replayPanel.style.display = 'none';
+        }
     });
 });
 

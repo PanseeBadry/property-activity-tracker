@@ -5,7 +5,8 @@ import { Activity, ActivityDocument } from 'src/schemas/activity.schema';
 import { SalesRep, SalesRepDocument } from 'src/schemas/sales-rep.schema';
 import { CreateActivityDto } from './dto/create-activity.dto';
 import { SocketGateway } from 'src/socket/socket.gateway';
-import { UpdateActivityDto } from './dto/update-activity.dto'; // أنشئ هذا الملف لاحقًا
+import { UpdateActivityDto } from './dto/update-activity.dto';
+import { Property, PropertyDocument } from 'src/schemas/property.schema';
 
 const WEIGHT_MAP = {
   visit: 5,
@@ -20,17 +21,27 @@ export class ActivityService {
   constructor(
     @InjectModel(Activity.name) private activityModel: Model<ActivityDocument>,
     @InjectModel(SalesRep.name) private salesRepModel: Model<SalesRepDocument>,
+    @InjectModel(Property.name) private propertyModel: Model<PropertyDocument>,
     private socketGateway: SocketGateway,
   ) {}
 
   async createActivity(dto: CreateActivityDto, salesRepId: string) {
     const weight = WEIGHT_MAP[dto.activityType] || 1;
-
+    const property = await this.propertyModel.findById(dto.propertyId);
+    if (!property) {
+      throw new Error('Property not found');
+    }
+    console.log('dto', dto);
     const activity = new this.activityModel({
       ...dto,
       weight,
       salesRepId,
+      location: {
+        lat: property.location.lat,
+        lng: property.location.lng,
+      },
     });
+    console.log('activity', activity);
 
     const saved = await activity.save();
     const populatedActivity = await saved.populate('salesRepId propertyId');

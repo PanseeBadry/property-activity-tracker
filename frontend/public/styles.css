@@ -803,6 +803,19 @@ body {
             background-color: #fef9e7;
             border-left: 3px solid #f39c12;
         }
+        .map-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+.map-legend div {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
 
 
 /* Responsive */

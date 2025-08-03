@@ -5,12 +5,14 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { Activity, ActivitySchema } from 'src/schemas/activity.schema';
 import { SalesRep, SalesRepSchema } from 'src/schemas/sales-rep.schema';
 import { SocketModule } from 'src/socket/socket.module';
+import { Property, PropertySchema } from 'src/schemas/property.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Activity.name, schema: ActivitySchema },
       { name: SalesRep.name, schema: SalesRepSchema },
+      { name: Property.name, schema: PropertySchema },
     ]),
     SocketModule,
   ],

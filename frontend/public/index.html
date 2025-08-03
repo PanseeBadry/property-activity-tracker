@@ -1,318 +1,395 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Property Activity Tracker</title>
-    <link rel="stylesheet" href="styles.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
 
-</head>
-<body>
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
     <!-- Header -->
     <header class="header">
-        <div class="container">
-            <div class="header-content">
-                <h1><i class="fas fa-home"></i> Property Activity Tracker</h1>
-                <div class="header-actions">
-                    <!-- Notification Icon -->
-                    <button class="notification-icon" id="notificationBtn" title="Notifications">
-                        <i class="fas fa-bell"></i>
-                        <span class="badge" id="notificationBadge" style="display: none;">0</span>
-                    </button>
-                    
-                    <!-- Replay Icon -->
-                    <button class="replay-icon" id="replayBtn" title="Activity Replay">
-                        <i class="fas fa-history"></i>
-                        <span class="badge" id="replayBadge" style="display: none;">0</span>
-                    </button>
-                    
-                    <div class="user-info" id="userInfo" style="display: none;">
-                        <span class="user-name" id="userName"></span>
-                        <span class="user-score" id="userScore">Score: 0</span>
-                        <button class="btn btn-secondary" id="logoutBtn">
-                            <i class="fas fa-sign-out-alt"></i> Logout
-                        </button>
-                    </div>
-                </div>
+      <div class="container">
+        <div class="header-content">
+          <h1><i class="fas fa-home"></i> Property Activity Tracker</h1>
+          <div class="header-actions">
+            <!-- Notification Icon -->
+            <button
+              class="notification-icon"
+              id="notificationBtn"
+              title="Notifications"
+            >
+              <i class="fas fa-bell"></i>
+              <span class="badge" id="notificationBadge" style="display: none"
+                >0</span
+              >
+            </button>
+
+            <!-- Replay Icon -->
+            <button class="replay-icon" id="replayBtn" title="Activity Replay">
+              <i class="fas fa-history"></i>
+              <span class="badge" id="replayBadge" style="display: none"
+                >0</span
+              >
+            </button>
+
+            <div class="user-info" id="userInfo" style="display: none">
+              <span class="user-name" id="userName"></span>
+              <span class="user-score" id="userScore">Score: 0</span>
+              <button class="btn btn-secondary" id="logoutBtn">
+                <i class="fas fa-sign-out-alt"></i> Logout
+              </button>
             </div>
+          </div>
         </div>
+      </div>
     </header>
 
     <!-- Notification Panel -->
     <div class="notification-panel" id="notificationPanel">
-        <div class="panel-header">
-            <span><i class="fas fa-bell"></i> Notifications</span>
-            <button class="btn-close" onclick="closeNotificationPanel()">×</button>
+      <div class="panel-header">
+        <span><i class="fas fa-bell"></i> Notifications</span>
+        <button class="btn-close" onclick="closeNotificationPanel()">×</button>
+      </div>
+      <div class="panel-body" id="notificationList">
+        <div class="empty-panel">
+          <i class="fas fa-bell-slash"></i>
+          <p>No notifications</p>
         </div>
-        <div class="panel-body" id="notificationList">
-            <div class="empty-panel">
-                <i class="fas fa-bell-slash"></i>
-                <p>No notifications</p>
-            </div>
-        </div>
-        <div class="panel-actions">
-            <button class="btn-small btn-clear" onclick="clearAllNotifications()">Clear All</button>
-            <button class="btn-small btn-close" onclick="closeNotificationPanel()">Close</button>
-        </div>
+      </div>
+      <div class="panel-actions">
+        <button class="btn-small btn-clear" onclick="clearAllNotifications()">
+          Clear All
+        </button>
+        <button class="btn-small btn-close" onclick="closeNotificationPanel()">
+          Close
+        </button>
+      </div>
     </div>
 
     <!-- Replay Panel -->
     <div class="replay-panel" id="replayPanel">
-        <div class="panel-header">
-            <span><i class="fas fa-history"></i> Activity Replay</span>
-            <button class="btn-close" onclick="closeReplayPanel()">×</button>
+      <div class="panel-header">
+        <span><i class="fas fa-history"></i> Activity Replay</span>
+        <button class="btn-close" onclick="closeReplayPanel()">×</button>
+      </div>
+      <div class="panel-body" id="replayList">
+        <div class="empty-panel">
+          <i class="fas fa-clock"></i>
+          <p>No missed activities</p>
         </div>
-        <div class="panel-body" id="replayList">
-            <div class="empty-panel">
-                <i class="fas fa-clock"></i>
-                <p>No missed activities</p>
-            </div>
-        </div>
-        <div class="panel-actions">
-            <button class="btn-small btn-clear" onclick="clearReplayActivities()">Clear All</button>
-            <button class="btn-small btn-close" onclick="closeReplayPanel()">Close</button>
-        </div>
+      </div>
+      <div class="panel-actions">
+        <button class="btn-small btn-clear" onclick="clearReplayActivities()">
+          Clear All
+        </button>
+        <button class="btn-small btn-close" onclick="closeReplayPanel()">
+          Close
+        </button>
+      </div>
     </div>
 
     <!-- Login Form -->
     <div class="login-overlay" id="loginOverlay">
-        <div class="login-form">
-            <h2><i class="fas fa-user-circle"></i> Login</h2>
-            <form id="loginForm">
-                <div class="form-group">
-                    <label for="salesRepName">Sales Rep Name:</label>
-                    <input type="text" id="salesRepName" required placeholder="Enter your name">
-                </div>
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-sign-in-alt"></i> Login
-                </button>
-            </form>
-        </div>
+      <div class="login-form">
+        <h2><i class="fas fa-user-circle"></i> Login</h2>
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="salesRepName">Sales Rep Name:</label>
+            <input
+              type="text"
+              id="salesRepName"
+              required
+              placeholder="Enter your name"
+            />
+          </div>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-sign-in-alt"></i> Login
+          </button>
+        </form>
+      </div>
     </div>
 
     <!-- Main Content -->
     <main class="main-content">
-        <div class="container">
-            <!-- Navigation Tabs -->
-            <nav class="tabs">
-                <button class="tab-btn active" data-tab="dashboard">
-                    <i class="fas fa-chart-pie"></i> Dashboard
-                </button>
-                <button class="tab-btn" data-tab="activities">
-                    <i class="fas fa-clipboard-list"></i> Activities
-                </button>
-                
-                <button class="tab-btn" data-tab="sales-reps">
-                    <i class="fas fa-users"></i> Sales Reps
-                </button>
-            </nav>
+      <div class="container">
+        <!-- Navigation Tabs -->
+        <nav class="tabs">
+          <button class="tab-btn active" data-tab="dashboard">
+            <i class="fas fa-chart-pie"></i> Dashboard
+          </button>
+          <button class="tab-btn" data-tab="activities">
+            <i class="fas fa-clipboard-list"></i> Activities
+          </button>
 
-            <!-- Dashboard Tab -->
-            <div class="tab-content active" id="dashboard">
-                <div class="dashboard-grid">
-                    <div class="stat-card">
-                        <div class="stat-icon">
-                            <i class="fas fa-clipboard-check"></i>
-                        </div>
-                        <div class="stat-info">
-                            <h3 id="totalActivities">0</h3>
-                            <p>Total Activities</p>
-                        </div>
-                    </div>
-                    
-                    <div class="stat-card">
-                        <div class="stat-icon">
-                            <i class="fas fa-users"></i>
-                        </div>
-                        <div class="stat-info">
-                            <h3 id="totalSalesReps">0</h3>
-                            <p>Sales Reps</p>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">
-                            <i class="fas fa-trophy"></i>
-                        </div>
-                        <div class="stat-info">
-                            <h3 id="currentScore">0</h3>
-                            <p>Your Score</p>
-                        </div>
-                    </div>
-                </div>
+          <button class="tab-btn" data-tab="sales-reps">
+            <i class="fas fa-users"></i> Sales Reps
+          </button>
+        </nav>
 
-                <!-- Recent Activities -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3><i class="fas fa-clock"></i> Recent Activities</h3>
-                    </div>
-                    <div class="card-body">
-                        <div id="recentActivities" class="activity-list"></div>
-                    </div>
-                </div>
-
-                <!-- Notifications -->
-                <div class="notifications" id="notifications"></div>
+        <!-- Dashboard Tab -->
+        <div class="tab-content active" id="dashboard">
+          <div class="dashboard-grid">
+            <div class="stat-card">
+              <div class="stat-icon">
+                <i class="fas fa-clipboard-check"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="totalActivities">0</h3>
+                <p>Total Activities</p>
+              </div>
             </div>
 
-            <!-- Activities Tab -->
-            <div class="tab-content" id="activities">
-                <div class="section-header">
-                    <h2><i class="fas fa-clipboard-list"></i> Activities Management</h2>
-                    <button class="btn btn-primary" id="newActivityBtn">
-                        <i class="fas fa-plus"></i> New Activity
-                    </button>
-                </div>
-
-                <!-- Activity Filters -->
-                <div class="filters">
-                    <select id="activityTypeFilter">
-                        <option value="">All Types</option>
-                        <option value="visit">Visit</option>
-                        <option value="call">Call</option>
-                        <option value="inspection">Inspection</option>
-                        <option value="follow-up">Follow-up</option>
-                        <option value="note">Note</option>
-                    </select>
-                    <select id="salesRepFilter">
-                        <option value="">All Sales Reps</option>
-                    </select>
-                </div>
-
-                <!-- Activities List -->
-                <div class="card">
-                    <div class="card-body">
-                        <div id="activitiesList" class="table-container"></div>
-                    </div>
-                </div>
+            <div class="stat-card">
+              <div class="stat-icon">
+                <i class="fas fa-users"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="totalSalesReps">0</h3>
+                <p>Sales Reps</p>
+              </div>
             </div>
-
-            <!-- Properties Tab -->
-            <div class="tab-content" id="properties">
-                <div class="section-header">
-                    <h2><i class="fas fa-building"></i> Properties Management</h2>
-                    <button class="btn btn-primary" id="newPropertyBtn">
-                        <i class="fas fa-plus"></i> New Property
-                    </button>
-                </div>
-
-                <!-- Properties List -->
-                <div class="card">
-                    <div class="card-body">
-                        <div id="propertiesList" class="table-container"></div>
-                    </div>
-                </div>
+            <div class="stat-card">
+              <div class="stat-icon">
+                <i class="fas fa-trophy"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="currentScore">0</h3>
+                <p>Your Score</p>
+              </div>
             </div>
+          </div>
 
-            <!-- Sales Reps Tab -->
-            <div class="tab-content" id="sales-reps">
-                <div class="section-header">
-                    <h2><i class="fas fa-users"></i> Sales Representatives</h2>
-                    <button class="btn btn-primary" id="newSalesRepBtn">
-                        <i class="fas fa-plus"></i> New Sales Rep
-                    </button>
-                </div>
-
-                <!-- Sales Reps List -->
-                <div class="card">
-                    <div class="card-body">
-                        <div id="salesRepsList" class="table-container"></div>
-                    </div>
-                </div>
+          <!-- Recent Activities -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-clock"></i> Recent Activities</h3>
             </div>
+            <div class="card-body">
+              <div id="mapLegend" class="map-legend"></div>
+              <div id="recentActivitiesMap" style="height: 400px"></div>
+            </div>
+          </div>
+
+          <!-- Notifications -->
+          <div class="notifications" id="notifications"></div>
         </div>
+
+        <!-- Activities Tab -->
+        <div class="tab-content" id="activities">
+          <div class="section-header">
+            <h2><i class="fas fa-clipboard-list"></i> Activities Management</h2>
+            <button class="btn btn-primary" id="newActivityBtn">
+              <i class="fas fa-plus"></i> New Activity
+            </button>
+          </div>
+
+          <!-- Activity Filters -->
+          <div class="filters">
+            <select id="activityTypeFilter">
+              <option value="">All Types</option>
+              <option value="visit">Visit</option>
+              <option value="call">Call</option>
+              <option value="inspection">Inspection</option>
+              <option value="follow-up">Follow-up</option>
+              <option value="note">Note</option>
+            </select>
+            <select id="salesRepFilter">
+              <option value="">All Sales Reps</option>
+            </select>
+          </div>
+
+          <!-- Activities List -->
+          <div class="card">
+            <div class="card-body">
+              <div id="activitiesList" class="table-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Properties Tab -->
+        <div class="tab-content" id="properties">
+          <div class="section-header">
+            <h2><i class="fas fa-building"></i> Properties Management</h2>
+            <button class="btn btn-primary" id="newPropertyBtn">
+              <i class="fas fa-plus"></i> New Property
+            </button>
+          </div>
+
+          <!-- Properties List -->
+          <div class="card">
+            <div class="card-body">
+              <div id="propertiesList" class="table-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sales Reps Tab -->
+        <div class="tab-content" id="sales-reps">
+          <div class="section-header">
+            <h2><i class="fas fa-users"></i> Sales Representatives</h2>
+            <button class="btn btn-primary" id="newSalesRepBtn">
+              <i class="fas fa-plus"></i> New Sales Rep
+            </button>
+          </div>
+
+          <!-- Sales Reps List -->
+          <div class="card">
+            <div class="card-body">
+              <div id="salesRepsList" class="table-container"></div>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
 
     <!-- Modals -->
     <div class="modal" id="activityModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="activityModalTitle">New Activity</h3>
-                <button class="close-btn">&times;</button>
-            </div>
-            <form id="activityForm">
-                <div class="form-group">
-                    <label for="activityProperty">Property:</label>
-                    <select id="activityProperty" name="propertyId" required>
-                        <option value="">Select Property</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="activityType">Activity Type:</label>
-                    <select id="activityType" name="activityType" required>
-                        <option value="">Select Type</option>
-                        <option value="visit">Visit (5 points)</option>
-                        <option value="call">Call (2 points)</option>
-                        <option value="inspection">Inspection (8 points)</option>
-                        <option value="follow-up">Follow-up (4 points)</option>
-                        <option value="note">Note (1 point)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="activityNote">Note:</label>
-                    <textarea id="activityNote" name="note" placeholder="Optional note..."></textarea>
-                </div>
-                
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" id="cancelActivity">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Activity</button>
-                </div>
-            </form>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="activityModalTitle">New Activity</h3>
+          <button class="close-btn">&times;</button>
         </div>
+        <form id="activityForm">
+          <div class="form-group">
+            <label for="activityProperty">Property:</label>
+            <select id="activityProperty" name="propertyId" required>
+              <option value="">Select Property</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="activityType">Activity Type:</label>
+            <select id="activityType" name="activityType" required>
+              <option value="">Select Type</option>
+              <option value="visit">Visit (5 points)</option>
+              <option value="call">Call (2 points)</option>
+              <option value="inspection">Inspection (8 points)</option>
+              <option value="follow-up">Follow-up (4 points)</option>
+              <option value="note">Note (1 point)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="activityNote">Note:</label>
+            <textarea
+              id="activityNote"
+              name="note"
+              placeholder="Optional note..."
+            ></textarea>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn btn-secondary" id="cancelActivity">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">Save Activity</button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <div class="modal" id="propertyModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="propertyModalTitle">New Property</h3>
-                <button class="close-btn">&times;</button>
-            </div>
-            <form id="propertyForm">
-                <div class="form-group">
-                    <label for="propertyName">Property Name:</label>
-                    <input type="text" id="propertyName" name="propertyName" required placeholder="Enter property name">
-                </div>
-                <div class="form-group">
-                    <label for="propertyAddress">Address:</label>
-                    <input type="text" id="propertyAddress" name="address" required placeholder="Enter full address">
-                </div>
-                <div class="form-group">
-                    <label for="propertyLat">Latitude:</label>
-                    <input type="number" id="propertyLat" name="lat" step="any" required placeholder="e.g., 40.7128">
-                </div>
-                <div class="form-group">
-                    <label for="propertyLng">Longitude:</label>
-                    <input type="number" id="propertyLng" name="lng" step="any" required placeholder="e.g., -74.0060">
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" id="cancelProperty">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Property</button>
-                </div>
-            </form>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="propertyModalTitle">New Property</h3>
+          <button class="close-btn">&times;</button>
         </div>
+        <form id="propertyForm">
+          <div class="form-group">
+            <label for="propertyName">Property Name:</label>
+            <input
+              type="text"
+              id="propertyName"
+              name="propertyName"
+              required
+              placeholder="Enter property name"
+            />
+          </div>
+          <div class="form-group">
+            <label for="propertyAddress">Address:</label>
+            <input
+              type="text"
+              id="propertyAddress"
+              name="address"
+              required
+              placeholder="Enter full address"
+            />
+          </div>
+          <div class="form-group">
+            <label for="propertyLat">Latitude:</label>
+            <input
+              type="number"
+              id="propertyLat"
+              name="lat"
+              step="any"
+              required
+              placeholder="e.g., 40.7128"
+            />
+          </div>
+          <div class="form-group">
+            <label for="propertyLng">Longitude:</label>
+            <input
+              type="number"
+              id="propertyLng"
+              name="lng"
+              step="any"
+              required
+              placeholder="e.g., -74.0060"
+            />
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn btn-secondary" id="cancelProperty">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">Save Property</button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <div class="modal" id="salesRepModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="salesRepModalTitle">New Sales Rep</h3>
-                <button class="close-btn">&times;</button>
-            </div>
-            <form id="salesRepForm">
-                <div class="form-group">
-                    <label for="salesRepNameInput">Name:</label>
-                    <input type="text" id="salesRepNameInput" name="name" required placeholder="Enter sales rep name">
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" id="cancelSalesRep">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Sales Rep</button>
-                </div>
-            </form>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="salesRepModalTitle">New Sales Rep</h3>
+          <button class="close-btn">&times;</button>
         </div>
+        <form id="salesRepForm">
+          <div class="form-group">
+            <label for="salesRepNameInput">Name:</label>
+            <input
+              type="text"
+              id="salesRepNameInput"
+              name="name"
+              required
+              placeholder="Enter sales rep name"
+            />
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn btn-secondary" id="cancelSalesRep">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">
+              Save Sales Rep
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <!-- Scripts -->
+     <script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+
+></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
     <script src="app.js"></script>
-</body>
+  </body>
 </html>

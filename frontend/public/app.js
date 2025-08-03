@@ -531,31 +531,84 @@ function updateDashboard() {
 }
 
 function renderRecentActivities() {
-    const container = document.getElementById('recentActivities');
-    const recentActivities = state.data.activities
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .slice(0, 5);
+    const container = document.getElementById('recentActivitiesMap');
 
-    if (recentActivities.length === 0) {
-        container.innerHTML = '<div class="empty-state"><i class="fas fa-clipboard"></i><p>No activities yet</p></div>';
-        return;
+    if (state.recentMap) {
+        state.recentMap.remove();
+        state.recentMap = null;
     }
 
-    container.innerHTML = recentActivities.map(activity => `
-        <div class="activity-item">
-            <div class="activity-icon ${activity.activityType}">
-                <i class="fas ${getActivityIcon(activity.activityType)}"></i>
-            </div>
-            <div class="activity-details">
-                <div class="activity-type">${activity.activityType}</div>
-                <div class="activity-info">
-                    ${activity.propertyId.name} - ${activity.salesRepId.name}
-                </div>
-                <div class="activity-time">${formatTime(activity.timestamp)}</div>
-            </div>
-        </div>
-    `).join('');
+    const map = L.map('recentActivitiesMap').setView([30.0444, 31.2357], 12); // Cairo center
+    state.recentMap = map; 
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const legendContainer = document.getElementById('mapLegend');
+    legendContainer.innerHTML = `
+        <div><i class="fas fa-home" style="color:blue"></i> Visit</div>
+        <div><i class="fas fa-phone" style="color:green"></i> Call</div>
+        <div><i class="fas fa-search" style="color:orange"></i> Inspection</div>
+        <div><i class="fas fa-redo" style="color:purple"></i> Follow-up</div>
+        <div><i class="fas fa-sticky-note" style="color:brown"></i> Note</div>
+        <div><i class="fas fa-map-marker-alt" style="color:red"></i> Replay Activity</div>
+    `;
+
+    state.data.properties.forEach(property => {
+        if (property?.location?.lat != null && property?.location?.lng != null) {
+            L.marker([property.location.lat, property.location.lng], {
+                icon: L.icon({
+                    iconUrl: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
+                    iconSize: [25, 25],
+                })
+            }).addTo(map).bindPopup(`<strong>${property.name}</strong><br>${property.address}`);
+        }
+    });
+
+    const recentActivities = state.data.activities
+        .filter(a => a.location?.lat != null && a.location?.lng != null)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, 10);
+
+    recentActivities.forEach(activity => {
+        const icon = getMapIcon(activity.activityType);
+        const marker = L.marker([activity.location.lat, activity.location.lng], { icon });
+
+        const popupContent = `
+            <strong>Type:</strong> ${activity.activityType}<br>
+            <strong>Property:</strong> ${activity.propertyId?.name}<br>
+            <strong>Rep:</strong> ${activity.salesRepId?.name}<br>
+            <strong>Time:</strong> ${formatDateTime(activity.timestamp)}
+        `;
+
+        marker.bindPopup(popupContent).addTo(map);
+    });
+
+    (state.replayActivities || []).forEach(activity => {
+        if (activity?.location?.lat != null && activity?.location?.lng != null) {
+            const marker = L.marker([activity.location.lat, activity.location.lng], {
+                icon: L.icon({
+                    iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 30],
+                })
+            });
+
+            const popup = `
+                <strong><span style="color:red;">Missed Activity</span></strong><br>
+                <strong>Type:</strong> ${activity.activityType}<br>
+                <strong>Property:</strong> ${activity.propertyId?.name}<br>
+                <strong>Rep:</strong> ${activity.salesRepId?.name}<br>
+                <strong>Time:</strong> ${formatDateTime(activity.timestamp)}
+            `;
+
+            marker.bindPopup(popup).addTo(map);
+        }
+    });
 }
+
+
 
 // Activities Management
 function renderActivities() {
@@ -609,6 +662,25 @@ function renderActivities() {
 
     container.innerHTML = tableHTML;
 }
+
+function getMapIcon(type) {
+    const colors = {
+        visit: 'blue',
+        call: 'green',
+        inspection: 'orange',
+        'follow-up': 'purple',
+        note: 'brown',
+    };
+
+    const color = colors[type] || 'gray';
+
+    return L.divIcon({
+        html: `<i class="fas ${getActivityIcon(type)}" style="color:${color}; font-size: 20px;"></i>`,
+        iconSize: [25, 25],
+        className: 'map-icon'
+    });
+}
+
 
 async function createActivity(formData) {
     const data = {
@@ -665,8 +737,8 @@ function renderProperties() {
                 ${state.data.properties.map(property => `
                     <tr>
                         <td><strong>${property.name}</strong></td>
-                        <td>${property.address}</td>
-                        <td>${property.lat.toFixed(4)}, ${property.lng.toFixed(4)}</td>
+                        <td>${property?.address}</td>
+                        <td>${property?.lat?.toFixed(4)}, ${property?.lng?.toFixed(4)}</td>
                         <td>
                             <div class="action-buttons">
                                 <button class="action-btn edit" onclick="editProperty('${property._id}')">

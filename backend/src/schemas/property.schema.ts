@@ -6,7 +6,7 @@ export type PropertyDocument = Property & Document;
 @Schema()
 export class Property {
   @Prop({ required: true })
-  propertyName: string;
+  name: string;
 
   @Prop({ required: true })
   address: string;

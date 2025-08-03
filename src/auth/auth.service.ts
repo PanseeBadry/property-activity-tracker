@@ -35,13 +35,13 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('SalesRep not found');
     }
+    console.log('User found for logout:', user);
     if (!user.isOnline) {
       throw new UnauthorizedException('SalesRep is not online');
     } else {
       user.isOnline = false;
       user.lastOnline = new Date();
       await user.save();
-      localStorage.removeItem('token');
     }
     return { message: 'Logged out successfully' };
   }

@@ -16,7 +16,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  private connectedUsers = new Map<string, string>(); // socket.id => salesRepId
+  private repConnections = new Map<string, Set<string>>(); // salesRepId => Set of socket ids
   private salesRepService: SalesRepService;
 
   constructor(private moduleRef: ModuleRef) {}
@@ -32,13 +32,23 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   async handleDisconnect(client: Socket) {
-    const salesRepId = this.connectedUsers.get(client.id);
-    if (salesRepId) {
-      console.log(`🔴 SalesRep disconnected: ${salesRepId}`);
+    let disconnectedRepId: string | null = null;
 
-      await this.salesRepService.setOffline(salesRepId);
+    // Find which rep had this socket
+    for (const [repId, sockets] of this.repConnections.entries()) {
+      if (sockets.has(client.id)) {
+        sockets.delete(client.id);
+        disconnectedRepId = repId;
 
-      this.connectedUsers.delete(client.id);
+        // If no more sockets remain for this rep, mark offline
+        if (sockets.size === 0) {
+          this.repConnections.delete(repId);
+          await this.salesRepService.setOffline(repId);
+          console.log(`🔴 SalesRep is now offline: ${repId}`);
+        }
+
+        break;
+      }
     }
 
     console.log(`Client disconnected: ${client.id}`);
@@ -63,15 +73,17 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const { salesRepId } = data;
 
-    // ✅ Send replay BEFORE changing status
+    // Send missed activities before marking online
     await this.salesRepService.sendReplayToUser(salesRepId, client);
-
-    // ✅ Update status to online AFTER replay
     await this.salesRepService.setOnline(salesRepId);
 
-    // Save user connection
-    this.connectedUsers.set(client.id, salesRepId);
+    // Track this socket for the sales rep
+    if (!this.repConnections.has(salesRepId)) {
+      this.repConnections.set(salesRepId, new Set());
+    }
 
-    console.log(`🟢 SalesRep is online: ${salesRepId}`);
+    this.repConnections.get(salesRepId)?.add(client.id);
+
+    console.log(`🟢 SalesRep is online: ${salesRepId} (${client.id})`);
   }
 }

@@ -6,6 +6,7 @@
     <title>Property Activity Tracker</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap"></script>
 
 </head>
 <body>
@@ -102,7 +103,9 @@
                 <button class="tab-btn" data-tab="activities">
                     <i class="fas fa-clipboard-list"></i> Activities
                 </button>
-                
+                <button class="tab-btn" data-tab="maps">
+                    <i class="fas fa-map-marker-alt"></i> Maps
+                </button>
                 <button class="tab-btn" data-tab="sales-reps">
                     <i class="fas fa-users"></i> Sales Reps
                 </button>
@@ -183,6 +186,61 @@
                 <div class="card">
                     <div class="card-body">
                         <div id="activitiesList" class="table-container"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Maps Tab -->
+            <div class="tab-content" id="maps">
+                <div class="section-header">
+                    <h2><i class="fas fa-map-marker-alt"></i> Activity Map</h2>
+                    <div class="map-controls">
+                        <button class="btn btn-secondary" id="refreshMapBtn">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                        <button class="btn btn-info" id="centerMapBtn">
+                            <i class="fas fa-crosshairs"></i> Center
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Map Legend -->
+                <div class="map-legend">
+                    <div class="legend-item">
+                        <span class="legend-marker new-activity"></span>
+                        <span>New Activities (Online)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-marker missed-activity"></span>
+                        <span>Missed Activities (Offline)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-marker property-marker"></span>
+                        <span>Properties</span>
+                    </div>
+                </div>
+
+                <!-- Map Container -->
+                <div class="card">
+                    <div class="card-body">
+                        <div id="mapContainer" class="map-container">
+                            <div id="googleMap" class="google-map"></div>
+                            <div id="mapLoading" class="map-loading">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <p>Loading map...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Activity Details Panel -->
+                <div id="activityDetailsPanel" class="activity-details-panel" style="display: none;">
+                    <div class="panel-header">
+                        <span id="activityDetailsTitle">Activity Details</span>
+                        <button class="btn-close" onclick="closeActivityDetails()">×</button>
+                    </div>
+                    <div class="panel-body" id="activityDetailsContent">
+                        <!-- Activity details will be populated here -->
                     </div>
                 </div>
             </div>

@@ -11,7 +11,14 @@ const state = {
     notifications: [],
     replayActivities: [],
     unreadNotifications: 0,
-    missedActivities: 0
+    missedActivities: 0,
+    map: {
+        instance: null,
+        markers: [],
+        infoWindow: null,
+        isOnline: navigator.onLine,
+        offlineActivities: []
+    }
 };
 
 function initializeState() {
@@ -483,6 +490,11 @@ async function loadData() {
     ]);
 
     updateDashboard();
+    
+    // Load map data if map is initialized
+    if (state.map.instance) {
+        loadMapData();
+    }
 }
 
 async function loadActivities() {
@@ -849,6 +861,15 @@ function switchTab(tabName) {
     document.getElementById(tabName).classList.add('active');
 
     state.currentTab = tabName;
+    
+    // Special handling for maps tab
+    if (tabName === 'maps' && state.map.instance) {
+        // Trigger map resize and reload data
+        setTimeout(() => {
+            google.maps.event.trigger(state.map.instance, 'resize');
+            loadMapData();
+        }, 100);
+    }
 }
 
 // Modal Management
@@ -1002,6 +1023,292 @@ if (savedToken && savedUser) {
             replayPanel.style.display = 'none';
         }
     });
+    // Map controls
+    document.getElementById('refreshMapBtn')?.addEventListener('click', refreshMap);
+    document.getElementById('centerMapBtn')?.addEventListener('click', centerMap);
+});
+
+// Google Maps Functions
+let map, markers = [], infoWindow;
+
+function initMap() {
+    // Default center (New York City)
+    const defaultCenter = { lat: 40.7128, lng: -74.0060 };
+    
+    map = new google.maps.Map(document.getElementById("googleMap"), {
+        zoom: 12,
+        center: defaultCenter,
+        styles: [
+            {
+                featureType: "poi",
+                elementType: "labels",
+                stylers: [{ visibility: "off" }]
+            }
+        ]
+    });
+    
+    state.map.instance = map;
+    infoWindow = new google.maps.InfoWindow();
+    state.map.infoWindow = infoWindow;
+    
+    // Hide loading indicator
+    document.getElementById('mapLoading').style.display = 'none';
+    
+    // Load map data if user is logged in
+    if (state.token) {
+        loadMapData();
+    }
+}
+
+function loadMapData() {
+    if (!state.map.instance) return;
+    
+    clearMapMarkers();
+    
+    // Add property markers
+    state.data.properties.forEach(property => {
+        addPropertyMarker(property);
+    });
+    
+    // Add activity markers for new activities (online)
+    const newActivities = state.data.activities.filter(activity => {
+        const activityDate = new Date(activity.timestamp);
+        const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        return activityDate > hourAgo && state.map.isOnline;
+    });
+    
+    newActivities.forEach(activity => {
+        addActivityMarker(activity, 'new');
+    });
+    
+    // Add markers for missed activities (from offline period)
+    state.map.offlineActivities.forEach(activity => {
+        addActivityMarker(activity, 'missed');
+    });
+    
+    // Center map on activities if available
+    if (state.data.properties.length > 0) {
+        centerMapOnData();
+    }
+}
+
+function addPropertyMarker(property) {
+    const marker = new google.maps.Marker({
+        position: { lat: parseFloat(property.lat), lng: parseFloat(property.lng) },
+        map: state.map.instance,
+        title: property.propertyName,
+        icon: {
+            url: 'data:image/svg+xml;base64,' + btoa(`
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                    <circle cx="12" cy="12" r="8" fill="#4299e1" stroke="white" stroke-width="2"/>
+                    <text x="12" y="16" text-anchor="middle" fill="white" font-size="12" font-family="Arial">P</text>
+                </svg>
+            `),
+            scaledSize: new google.maps.Size(24, 24)
+        }
+    });
+    
+    marker.addListener('click', () => {
+        showPropertyInfo(property);
+    });
+    
+    state.map.markers.push(marker);
+}
+
+function addActivityMarker(activity, type) {
+    const property = state.data.properties.find(p => p.id === activity.propertyId);
+    if (!property) return;
+    
+    const color = type === 'new' ? '#48bb78' : '#f56565';
+    const letter = type === 'new' ? 'N' : 'M';
+    
+    const marker = new google.maps.Marker({
+        position: { lat: parseFloat(property.lat), lng: parseFloat(property.lng) },
+        map: state.map.instance,
+        title: `${type === 'new' ? 'New' : 'Missed'} Activity: ${activity.activityType}`,
+        icon: {
+            url: 'data:image/svg+xml;base64,' + btoa(`
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28">
+                    <circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="2"/>
+                    <text x="12" y="16" text-anchor="middle" fill="white" font-size="10" font-family="Arial" font-weight="bold">${letter}</text>
+                </svg>
+            `),
+            scaledSize: new google.maps.Size(28, 28)
+        },
+        zIndex: type === 'new' ? 1000 : 999
+    });
+    
+    marker.addListener('click', () => {
+        showActivityInfo(activity, property, type);
+    });
+    
+    state.map.markers.push(marker);
+}
+
+function clearMapMarkers() {
+    state.map.markers.forEach(marker => {
+        marker.setMap(null);
+    });
+    state.map.markers = [];
+}
+
+function showPropertyInfo(property) {
+    const activities = state.data.activities.filter(a => a.propertyId === property.id);
+    const content = `
+        <div style="max-width: 250px;">
+            <h4 style="margin: 0 0 10px 0; color: #5a67d8;">${property.propertyName}</h4>
+            <p style="margin: 5px 0;"><strong>Address:</strong> ${property.address}</p>
+            <p style="margin: 5px 0;"><strong>Activities:</strong> ${activities.length}</p>
+            ${activities.length > 0 ? `<p style="margin: 5px 0;"><strong>Last Activity:</strong> ${formatDateTime(activities[activities.length - 1].timestamp)}</p>` : ''}
+        </div>
+    `;
+    
+    state.map.infoWindow.setContent(content);
+    state.map.infoWindow.open(state.map.instance, state.map.markers.find(m => 
+        m.getPosition().lat() === parseFloat(property.lat) && 
+        m.getPosition().lng() === parseFloat(property.lng)
+    ));
+}
+
+function showActivityInfo(activity, property, type) {
+    const salesRep = state.data.salesReps.find(rep => rep.id === activity.salesRepId);
+    const typeLabel = type === 'new' ? 'New Activity (Online)' : 'Missed Activity (Offline)';
+    const typeColor = type === 'new' ? '#48bb78' : '#f56565';
+    
+    const content = `
+        <div style="max-width: 280px;">
+            <h4 style="margin: 0 0 10px 0; color: ${typeColor};">${typeLabel}</h4>
+            <p style="margin: 5px 0;"><strong>Property:</strong> ${property.propertyName}</p>
+            <p style="margin: 5px 0;"><strong>Type:</strong> ${activity.activityType}</p>
+            <p style="margin: 5px 0;"><strong>Sales Rep:</strong> ${salesRep ? salesRep.name : 'Unknown'}</p>
+            <p style="margin: 5px 0;"><strong>Time:</strong> ${formatDateTime(activity.timestamp)}</p>
+            ${activity.note ? `<p style="margin: 5px 0;"><strong>Note:</strong> ${activity.note}</p>` : ''}
+            <button onclick="showActivityDetails('${activity.id}')" style="
+                background: #5a67d8; 
+                color: white; 
+                border: none; 
+                padding: 8px 12px; 
+                border-radius: 4px; 
+                cursor: pointer; 
+                margin-top: 8px;
+            ">View Details</button>
+        </div>
+    `;
+    
+    state.map.infoWindow.setContent(content);
+    state.map.infoWindow.open(state.map.instance, state.map.markers.find(m => 
+        m.getTitle().includes(activity.activityType)
+    ));
+}
+
+function showActivityDetails(activityId) {
+    const activity = state.data.activities.find(a => a.id === activityId);
+    const property = state.data.properties.find(p => p.id === activity.propertyId);
+    const salesRep = state.data.salesReps.find(rep => rep.id === activity.salesRepId);
+    
+    if (!activity) return;
+    
+    const panel = document.getElementById('activityDetailsPanel');
+    const content = document.getElementById('activityDetailsContent');
+    
+    content.innerHTML = `
+        <div class="activity-detail-item">
+            <div class="activity-detail-label">Property</div>
+            <div class="activity-detail-value">${property ? property.propertyName : 'Unknown'}</div>
+        </div>
+        <div class="activity-detail-item">
+            <div class="activity-detail-label">Address</div>
+            <div class="activity-detail-value">${property ? property.address : 'Unknown'}</div>
+        </div>
+        <div class="activity-detail-item">
+            <div class="activity-detail-label">Activity Type</div>
+            <div class="activity-detail-value">${activity.activityType}</div>
+        </div>
+        <div class="activity-detail-item">
+            <div class="activity-detail-label">Sales Representative</div>
+            <div class="activity-detail-value">${salesRep ? salesRep.name : 'Unknown'}</div>
+        </div>
+        <div class="activity-detail-item">
+            <div class="activity-detail-label">Date & Time</div>
+            <div class="activity-detail-value">${formatDateTime(activity.timestamp)}</div>
+        </div>
+        ${activity.note ? `
+        <div class="activity-detail-item">
+            <div class="activity-detail-label">Note</div>
+            <div class="activity-detail-value">${activity.note}</div>
+        </div>
+        ` : ''}
+    `;
+    
+    panel.style.display = 'block';
+}
+
+function closeActivityDetails() {
+    document.getElementById('activityDetailsPanel').style.display = 'none';
+}
+
+function refreshMap() {
+    if (state.map.instance) {
+        loadMapData();
+        showNotification('Map refreshed with latest data', 'success');
+    }
+}
+
+function centerMap() {
+    if (state.map.instance && state.data.properties.length > 0) {
+        centerMapOnData();
+        showNotification('Map centered on activities', 'info');
+    }
+}
+
+function centerMapOnData() {
+    if (!state.map.instance || state.data.properties.length === 0) return;
+    
+    const bounds = new google.maps.LatLngBounds();
+    
+    state.data.properties.forEach(property => {
+        bounds.extend(new google.maps.LatLng(parseFloat(property.lat), parseFloat(property.lng)));
+    });
+    
+    state.map.instance.fitBounds(bounds);
+    
+    // Ensure minimum zoom level
+    google.maps.event.addListenerOnce(state.map.instance, 'bounds_changed', function() {
+        if (state.map.instance.getZoom() > 15) {
+            state.map.instance.setZoom(15);
+        }
+    });
+}
+
+// Online/Offline detection for missed activities
+window.addEventListener('online', function() {
+    state.map.isOnline = true;
+    showNotification('You are back online! Checking for missed activities...', 'info');
+    
+    // Load any activities that occurred while offline
+    if (state.token) {
+        loadData().then(() => {
+            const newOfflineActivities = state.data.activities.filter(activity => {
+                const activityDate = new Date(activity.timestamp);
+                return activityDate > new Date(Date.now() - 24 * 60 * 60 * 1000) && // Within last 24 hours
+                       !state.map.offlineActivities.find(offline => offline.id === activity.id);
+            });
+            
+            if (newOfflineActivities.length > 0) {
+                state.map.offlineActivities = [...state.map.offlineActivities, ...newOfflineActivities];
+                showNotification(`Found ${newOfflineActivities.length} missed activities while offline`, 'warning');
+                
+                if (state.currentTab === 'maps') {
+                    loadMapData();
+                }
+            }
+        });
+    }
+});
+
+window.addEventListener('offline', function() {
+    state.map.isOnline = false;
+    showNotification('You are offline. Activities will be marked when you return online.', 'warning');
 });
 
 // Helper function for form data

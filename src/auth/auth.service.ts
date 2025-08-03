@@ -41,7 +41,7 @@ export class AuthService {
       user.isOnline = false;
       user.lastOnline = new Date();
       await user.save();
-      localStorage.removeItem('token');
+      // Note: localStorage is handled on the client side, not on the server
     }
     return { message: 'Logged out successfully' };
   }

@@ -78,7 +78,7 @@ export class ActivityService {
   async getActivities(filters?: {
     salesRepId?: string;
     activityType?: string;
-    propertyId?: string; // إضافة فيلتر الـ property
+    propertyId?: string;
   }): Promise<Activity[]> {
     const query: FilterQuery<ActivityDocument> = {};
 

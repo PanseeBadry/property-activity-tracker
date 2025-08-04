@@ -2,13 +2,13 @@ import {
   Controller,
   Post,
   Get,
-  Patch,
   Delete,
   Body,
   Param,
   UseGuards,
   Req,
   Query,
+  Put,
 } from '@nestjs/common';
 import { ActivityService } from './activity.service';
 import { CreateActivityDto } from './dto/create-activity.dto';
@@ -49,7 +49,7 @@ export class ActivityController {
     return this.activityService.getActivityById(id);
   }
 
-  @Patch(':id')
+  @Put(':id')
   async updateActivity(
     @Param('id') id: string,
     @Body() updateDto: UpdateActivityDto,

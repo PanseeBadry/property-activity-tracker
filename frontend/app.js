@@ -171,10 +171,9 @@ async function updateUserInfo() {
 }
 
 function initializeSocket() {
-    // تنظيف الاتصال القديم إن وجد
     if (socket) {
         socket.disconnect();
-        socket.removeAllListeners(); // مهم جداً!
+        socket.removeAllListeners(); 
     }
     
     socket = io(API_BASE_URL, {
@@ -187,9 +186,8 @@ function initializeSocket() {
     });
     
     socket.on('connect', () => {
-        console.log('🟢 Connected to server');
+        console.log('Connected to server');
         
-        // تأكد إن الـ user موجود قبل الإرسال
         if (currentUser && currentUser._id) {
             socket.emit('user:online', { salesRepId: currentUser._id });
         } else {
@@ -215,17 +213,14 @@ function initializeSocket() {
     socket.on('disconnect', (reason) => {
         console.log('🔴 Disconnected from server. Reason:', reason);
         
-        // في حالة قطع الاتصال من الـ server، حاول تتصل تاني
         if (reason === 'io server disconnect') {
             socket.connect();
         }
     });
     
-    // إضافة event listeners للـ reconnection
     socket.on('reconnect', (attemptNumber) => {
         console.log('🔄 Reconnected to server after', attemptNumber, 'attempts');
         
-        // إعادة إرسال user:online بعد الـ reconnection
         if (currentUser && currentUser._id) {
             socket.emit('user:online', { salesRepId: currentUser._id });
         }
@@ -241,7 +236,6 @@ function initializeSocket() {
     
     socket.on('reconnect_failed', () => {
         console.error('❌ Failed to reconnect to server after maximum attempts');
-        // ممكن تعرضي رسالة للمستخدم هنا
         addNotification('Connection lost. Please refresh the page.');
     });
     
@@ -370,6 +364,7 @@ function populatePropertySelects() {
     const selects = [
         document.getElementById('filterProperty'),
         document.getElementById('activityProperty'),
+        document.getElementById('editActivityProperty'),
     ];
     
     selects.forEach(select => {
@@ -532,11 +527,7 @@ function updateSalesRepsTable() {
 
 // Activity management
 function showAddActivityModal() {
-    document.getElementById('addActivityModal').classList.remove('hidden');
-    // Set current date/time
-    // const now = new Date();
-    // now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    // document.getElementById('activityDateTime').value = now.toISOString().slice(0, 16);
+    document.getElementById('addActivityModal').classList.remove('hidden');   
 }
 
 function hideAddActivityModal() {
@@ -775,10 +766,59 @@ function getActivityColor(activityType) {
     return colors[activityType] || 'gray';
 }
 
+let currentEditingActivityId = null;
+
 async function editActivity(activityId) {
-    // Implement edit functionality
-    alert('Edit functionality not implemented yet');
+  try {
+    console.log('Editing activity with ID:', activityId);
+    const res = await fetch(`${API_BASE_URL}/activities/${activityId}`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
+    });
+    const activity = await res.json();
+    console.log('Editing activity:', activity.propertyId.name);
+
+    currentEditingActivityId = activityId;
+
+    document.getElementById('editActivityType').value = activity.activityType || '';
+    document.getElementById('editActivityProperty').value = activity.propertyId._id || '';
+
+document.getElementById("editActivityModal").classList.remove("hidden");
+  } catch (error) {
+    console.error('Error loading activity:', error);
+    alert('Failed to load activity for editing.');
+  }
 }
+
+async function saveActivityChanges() {
+  const activityType = document.getElementById('editActivityType').value;
+  const propertyId = document.getElementById('editActivityProperty').value;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/activities/${currentEditingActivityId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
+      body: JSON.stringify({ activityType, propertyId }),
+    });
+    console.log("res", await res.json());
+
+    if (!res.ok) throw new Error('Failed to save changes');
+
+document.getElementById("editActivityModal").classList.add("hidden");
+    alert('Activity updated successfully');
+    loadInitialData(); 
+
+  } catch (error) {
+    console.error('Error saving changes:', error);
+    alert('Failed to save activity.');
+  }
+}
+
+
 
 async function deleteActivity(activityId) {
     if (!confirm('Are you sure you want to delete this activity?')) {

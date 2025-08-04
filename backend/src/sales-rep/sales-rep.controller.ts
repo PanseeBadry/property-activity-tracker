@@ -2,11 +2,11 @@ import {
   Controller,
   Get,
   Post,
-  Patch,
   Delete,
   Param,
   Body,
   UseGuards,
+  Put,
 } from '@nestjs/common';
 import { SalesRepService } from './sales-rep.service';
 import { CreateSalesRepDto } from './dto/create-sales-rep.dto';
@@ -33,7 +33,7 @@ export class SalesRepController {
     return this.salesRepService.create(dto);
   }
 
-  @Patch(':id')
+  @Put(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateSalesRepDto) {
     return this.salesRepService.update(id, dto);
   }

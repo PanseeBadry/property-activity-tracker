@@ -30,14 +30,18 @@ export class ActivityController {
   }
 
   @Get()
-  async getFilteredActivities(
-    @Query('salesRepId') repId?: string,
-    @Query('activityType') type?: string,
+  async getActivities(
+    @Query('activityType') activityType?: string,
+    @Query('salesRepId') salesRepId?: string,
+    @Query('propertyId') propertyId?: string,
   ) {
-    return this.activityService.getActivities({
-      salesRepId: repId,
-      activityType: type,
-    });
+    const filters: any = {};
+
+    if (activityType) filters.activityType = activityType;
+    if (salesRepId) filters.salesRepId = salesRepId;
+    if (propertyId) filters.propertyId = propertyId;
+
+    return this.activityService.getActivities(filters);
   }
 
   @Get(':id')

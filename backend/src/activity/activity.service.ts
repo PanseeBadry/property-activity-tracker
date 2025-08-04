@@ -40,6 +40,7 @@ export class ActivityService {
         lat: property.location.lat,
         lng: property.location.lng,
       },
+      timestamp: new Date(),
     });
     console.log('activity', activity);
 
@@ -77,6 +78,7 @@ export class ActivityService {
   async getActivities(filters?: {
     salesRepId?: string;
     activityType?: string;
+    propertyId?: string; // إضافة فيلتر الـ property
   }): Promise<Activity[]> {
     const query: FilterQuery<ActivityDocument> = {};
 
@@ -88,7 +90,14 @@ export class ActivityService {
       query.activityType = filters.activityType;
     }
 
-    return this.activityModel.find(query).populate('salesRepId propertyId');
+    if (filters?.propertyId) {
+      query.propertyId = filters.propertyId;
+    }
+
+    return this.activityModel
+      .find(query)
+      .populate('salesRepId propertyId')
+      .sort({ timestamp: -1 });
   }
 
   async getActivityById(id: string) {

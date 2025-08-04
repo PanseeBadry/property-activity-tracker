@@ -16,7 +16,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  private repConnections = new Map<string, Set<string>>(); // salesRepId => Set of socket ids
+  private repConnections = new Map<string, Set<string>>();
   private salesRepService: SalesRepService;
 
   constructor(private moduleRef: ModuleRef) {}
@@ -28,10 +28,10 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   handleConnection(client: Socket) {
-    console.log(`🔌 Client connected: ${client.id}`);
+    console.log(`Client connected: ${client.id}`);
   }
 
-  async handleDisconnect(client: Socket) {
+  handleDisconnect(client: Socket) {
     let disconnectedRepId: string | null = null;
 
     // Find which rep had this socket
@@ -40,11 +40,16 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
         sockets.delete(client.id);
         disconnectedRepId = repId;
 
-        // If no more sockets remain for this rep, mark offline
+        // If no more sockets remain for this rep, wait a bit before marking offline
         if (sockets.size === 0) {
           this.repConnections.delete(repId);
-          await this.salesRepService.setOffline(repId);
-          console.log(`🔴 SalesRep is now offline: ${repId}`);
+
+          setTimeout(async () => {
+            if (!this.repConnections.has(repId)) {
+              await this.salesRepService.setOffline(repId);
+              console.log(`SalesRep is now offline: ${repId}`);
+            }
+          }, 5000);
         }
 
         break;
@@ -84,6 +89,6 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     this.repConnections.get(salesRepId)?.add(client.id);
 
-    console.log(`🟢 SalesRep is online: ${salesRepId} (${client.id})`);
+    console.log(`SalesRep is online: ${salesRepId} (${client.id})`);
   }
 }

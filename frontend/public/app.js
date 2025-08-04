@@ -1,1083 +1,814 @@
-const state = {
-    token: null,
-    user: null,
-    socket: null,
-    currentTab: 'dashboard',
-    data: {
-        activities: [],
-        properties: [],
-        salesReps: []
-    },
-    notifications: [],
-    replayActivities: [],
-    unreadNotifications: 0,
-    missedActivities: 0
+// Configuration
+const API_BASE_URL = 'http://localhost:3000';
+let currentUser = null;
+let socket = null;
+let map = null;
+let activities = [];
+let properties = [];
+let salesReps = [];
+let notifications = [];
+let missedActivities = [];
+const activityColors = {
+    'visit': '#10b981',        
+    'call': '#3b82f6',         
+    'inspection': '#f59e0b',
+    'follow-up': '#8b5cf6',    
+    'note': '#6b7280'         
 };
 
-function initializeState() {
-   state.token = localStorage.getItem('token');
-    const userData = localStorage.getItem('user');
-    state.user = userData ? JSON.parse(userData) : null;
-    state.notifications = [];
-    state.replayActivities = [];
-    state.unreadNotifications = 0;
-    state.missedActivities = 0;
+// Initialize the application
+document.addEventListener('DOMContentLoaded', function() {
+    initializeApp();
+});
+
+function initializeApp() {
+    // Check if user is already logged in
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('userData');
+    
+    if (token && userData) {
+        currentUser = JSON.parse(userData);
+        console.log('User logged in:', currentUser);
+        hideLoginModal();
+        initializeMainApp();
+    } else {
+        showLoginModal();
+    }
+    
+    setupEventListeners();
 }
 
-// API Configuration
-const API_BASE = 'http://localhost:3000';
-const api = {
-    async request(endpoint, options = {}) {
-        const config = {
+function setupEventListeners() {
+    // Login form
+    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    
+    // Logout button
+    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+    
+    // Tab navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => switchTab(e.target.dataset.tab));
+    });
+    
+    // Add activity modal
+    document.getElementById('addActivityBtn').addEventListener('click', showAddActivityModal);
+    document.getElementById('cancelActivityBtn').addEventListener('click', hideAddActivityModal);
+    document.getElementById('addActivityForm').addEventListener('submit', handleAddActivity);
+    
+    // Notification panel
+    document.getElementById('notificationBtn').addEventListener('click', toggleNotificationPanel);
+    
+    // Replay button
+    document.getElementById('replayBtn').addEventListener('click', handleReplay);
+    
+    // Activity filters
+    document.getElementById('filterType').addEventListener('change', filterActivities);
+    document.getElementById('filterProperty').addEventListener('change', filterActivities);
+        document.getElementById('filterSalesRep').addEventListener('change', filterActivities);
+
+    
+    // Close modals when clicking outside
+    document.addEventListener('click', (e) => {
+        if (e.target.id === 'addActivityModal') {
+            hideAddActivityModal();
+        }
+        if (!e.target.closest('#notificationPanel') && !e.target.closest('#notificationBtn')) {
+            hideNotificationPanel();
+        }
+    });
+}
+
+// Authentication functions
+async function handleLogin(e) {
+    e.preventDefault();
+    const name = document.getElementById('salesRepName').value.trim();
+    
+    if (!name) return;
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/login`, {
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...(state.token && { Authorization: `Bearer ${state.token}` })
             },
-            ...options
-        };
-
-        try {
-            const response = await fetch(`${API_BASE}${endpoint}`, config);
-            
-            if (response.status === 401) {
-                this.handleUnauthorized();
-                return null;
-            }
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.message || 'Request failed');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('API Error:', error);
-            showNotification(error.message, 'error');
-            return null;
+            body: JSON.stringify({ name }),
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            localStorage.setItem('token', data.access_token);
+            localStorage.setItem('userData', JSON.stringify(data.salesRep));
+            currentUser = data.salesRep;
+            console.log(data)
+            hideLoginModal();
+            initializeMainApp();
+        } else {
+            alert('Login failed: ' + (data.message || 'Unknown error'));
         }
-    },
-
-    handleUnauthorized() {
-        logout();
-        showNotification('Session expired. Please login again.', 'warning');
-    },
-
-    // Auth endpoints
-    async login(name) {
-        return this.request('/auth/login', {
-            method: 'POST',
-            body: JSON.stringify({ name })
-        });
-    },
-
-    async logout() {
-        return this.request('/auth/logout', { method: 'POST' });
-    },
-
-    // Sales Reps endpoints
-    async getSalesReps() {
-        return this.request('/sales-reps');
-    },
-
-    async createSalesRep(data) {
-        return this.request('/sales-reps', {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-    },
-
-    async updateSalesRep(id, data) {
-        return this.request(`/sales-reps/${id}`, {
-            method: 'PATCH',
-            body: JSON.stringify(data)
-        });
-    },
-
-    async deleteSalesRep(id) {
-        return this.request(`/sales-reps/${id}`, { method: 'DELETE' });
-    },
-
-    // Properties endpoints
-    async getProperties() {
-        return await this.request('/property');
-    },
-
-    async createProperty(data) {
-        return this.request('/property', {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-    },
-
-    async updateProperty(id, data) {
-        return this.request(`/property/${id}`, {
-            method: 'PATCH',
-            body: JSON.stringify(data)
-        });
-    },
-
-    async deleteProperty(id) {
-        return this.request(`/property/${id}`, { method: 'DELETE' });
-    },
-
-    // Activities endpoints
-    async getActivities(filters = {}) {
-        const params = new URLSearchParams();
-        Object.entries(filters).forEach(([key, value]) => {
-            if (value) params.append(key, value);
-        });
-        const query = params.toString() ? `?${params.toString()}` : '';
-        return this.request(`/activities${query}`);
-    },
-
-    async createActivity(data) {
-        return this.request('/activities', {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-    },
-
-    async updateActivity(id, data) {
-        return this.request(`/activities/${id}`, {
-            method: 'PATCH',
-            body: JSON.stringify(data)
-        });
-    },
-
-    async deleteActivity(id) {
-        return this.request(`/activities/${id}`, { method: 'DELETE' });
-    }
-};
-
-// Notification Management
-function addNotification(title, message, type = 'info') {
-    const notification = {
-        id: Date.now() + Math.random(),
-        title,
-        message,
-        type,
-        timestamp: new Date(),
-        read: false
-    };
-    
-    state.notifications.unshift(notification);
-    state.unreadNotifications++;
-    updateNotificationBadge();
-    
-    // Keep only last 50 notifications
-    if (state.notifications.length > 50) {
-        state.notifications = state.notifications.slice(0, 50);
+    } catch (error) {
+        console.error('Login error:', error);
+        alert('Login failed. Please check your connection.');
     }
 }
 
-function markNotificationAsRead(id) {
-    const notification = state.notifications.find(n => n.id === id);
-    if (notification && !notification.read) {
-        notification.read = true;
-        state.unreadNotifications--;
-        updateNotificationBadge();
-    }
-}
-
-function clearAllNotifications() {
-    state.notifications = [];
-    state.unreadNotifications = 0;
-    updateNotificationBadge();
-    renderNotifications();
-}
-
-function updateNotificationBadge() {
-    const badge = document.getElementById('notificationBadge');
-    if (state.unreadNotifications > 0) {
-        badge.textContent = state.unreadNotifications > 99 ? '99+' : state.unreadNotifications;
-        badge.style.display = 'flex';
-    } else {
-        badge.style.display = 'none';
-    }
-}
-
-function renderNotifications() {
-    const container = document.getElementById('notificationList');
-    
-    if (state.notifications.length === 0) {
-        container.innerHTML = `
-            <div class="empty-panel">
-                <i class="fas fa-bell-slash"></i>
-                <p>No notifications</p>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = state.notifications.map(notification => `
-        <div class="notification-item ${!notification.read ? 'unread' : ''}" 
-             onclick="markNotificationAsRead(${notification.id})">
-            <div class="notification-title">${notification.title}</div>
-            <div class="notification-text">${notification.message}</div>
-            <div class="notification-time">${formatDateTime(notification.timestamp)}</div>
-        </div>
-    `).join('');
-}
-
-// Replay Activities Management
-function addReplayActivity(activity) {
-    const replayItem = {
-        id: activity._id || Date.now() + Math.random(),
-        activity,
-        timestamp: new Date(activity.timestamp),
-        viewed: false
-    };
-    
-    state.replayActivities.unshift(replayItem);
-    state.missedActivities++;
-    updateReplayBadge();
-    
-    // Keep only last 100 replay activities
-    if (state.replayActivities.length > 100) {
-        state.replayActivities = state.replayActivities.slice(0, 100);
-    }
-}
-
-function markReplayAsViewed(id) {
-    const replayItem = state.replayActivities.find(r => r.id === id);
-    if (replayItem && !replayItem.viewed) {
-        replayItem.viewed = true;
-        state.missedActivities--;
-        updateReplayBadge();
-    }
-}
-
-function clearReplayActivities() {
-    state.replayActivities = [];
-    state.missedActivities = 0;
-    updateReplayBadge();
-    renderReplayActivities();
-}
-
-function updateReplayBadge() {
-    const badge = document.getElementById('replayBadge');
-    if (state.missedActivities > 0) {
-        badge.textContent = state.missedActivities > 99 ? '99+' : state.missedActivities;
-        badge.style.display = 'flex';
-    } else {
-        badge.style.display = 'none';
-    }
-}
-
-function renderReplayActivities() {
-    const container = document.getElementById('replayList');
-    
-    if (state.replayActivities.length === 0) {
-        container.innerHTML = `
-            <div class="empty-panel">
-                <i class="fas fa-clock"></i>
-                <p>No missed activities</p>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = state.replayActivities.map(replayItem => `
-        <div class="replay-item ${!replayItem.viewed ? 'missed' : ''}" 
-             onclick="markReplayAsViewed(${replayItem.id})">
-            <div class="notification-title">
-                <i class="fas ${getActivityIcon(replayItem.activity.activityType)}"></i>
-                ${replayItem.activity.activityType} Activity
-            </div>
-            <div class="replay-text">
-                ${replayItem.activity.propertyId?.name || 'Unknown Property'} - 
-                ${replayItem.activity.salesRepId?.name || 'Unknown Rep'}
-                ${replayItem.activity.note ? `<br><small>${replayItem.activity.note}</small>` : ''}
-            </div>
-            <div class="replay-time">${formatDateTime(replayItem.timestamp)}</div>
-        </div>
-    `).join('');
-}
-
-// Panel Management
-function toggleNotificationPanel() {
-    const panel = document.getElementById('notificationPanel');
-    const replayPanel = document.getElementById('replayPanel');
-    
-    // Close replay panel if open
-    replayPanel.style.display = 'none';
-    
-    if (panel.style.display === 'block') {
-        panel.style.display = 'none';
-    } else {
-        panel.style.display = 'block';
-        renderNotifications();
-    }
-}
-
-function toggleReplayPanel() {
-    const panel = document.getElementById('replayPanel');
-    const notificationPanel = document.getElementById('notificationPanel');
-    
-    // Close notification panel if open
-    notificationPanel.style.display = 'none';
-    
-    if (panel.style.display === 'block') {
-        panel.style.display = 'none';
-    } else {
-        panel.style.display = 'block';
-        renderReplayActivities();
-    }
-}
-
-function closeNotificationPanel() {
-    document.getElementById('notificationPanel').style.display = 'none';
-}
-
-function closeReplayPanel() {
-    document.getElementById('replayPanel').style.display = 'none';
-}
-
-// WebSocket Management
-function initializeSocket() {
-    if (!state.token || state.socket) return;
-
-    state.socket = io('http://localhost:3000');
-
-    state.socket.on('connect', () => {
-        console.log('Connected to server');
-        if (state.user) {
-            state.socket.emit('user:online', { salesRepId: state.user._id });
-        }
-    });
-
-    state.socket.on('activity:new', (activity) => {
-        const message = `New activity: ${activity.activityType} by ${activity.salesRepId.name}`;
-        
-        // Add to notifications
-        addNotification('New Activity', message, 'info');
-        
-        // Also show as toast notification
-        showNotification(message, 'info');
-        
-        loadData();
-    });
-
-    state.socket.on('activity:replay', (activities) => {
-        if (activities.length > 0) {
-            // Add each activity to replay list
-            activities.forEach(activity => {
-                addReplayActivity(activity);
+async function handleLogout() {
+    try {
+        const token = localStorage.getItem('token');
+        if (token) {
+            await fetch(`${API_BASE_URL}/auth/logout`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
             });
-            
-            // Add notification about missed activities
-            addNotification(
-                'Missed Activities', 
-                `You have ${activities.length} missed activities while you were offline`, 
-                'warning'
-            );
-            
-            // Show toast notification
-            showNotification(`You have ${activities.length} missed activities`, 'info');
-            
-            loadData();
+        }
+    } catch (error) {
+        console.error('Logout error:', error);
+    }
+    
+    // Clean up
+    localStorage.removeItem('token');
+    localStorage.removeItem('userData');
+    currentUser = null;
+    
+    if (socket) {
+        socket.disconnect();
+        socket = null;
+    }
+    
+    showLoginModal();
+}
+
+function showLoginModal() {
+    document.getElementById('loginModal').classList.remove('hidden');
+}
+
+function hideLoginModal() {
+    document.getElementById('loginModal').classList.add('hidden');
+}
+
+// Main app initialization
+function initializeMainApp() {
+    updateUserInfo();
+    initializeSocket();
+    initializeMap();
+    loadInitialData();
+}
+
+async function updateUserInfo() {
+    currentUser = await fetch(`${API_BASE_URL}/sales-reps/${currentUser._id}`, {
+        headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+    }).then(response => response.json());
+    if (currentUser) {
+        document.getElementById('userName').textContent = currentUser.name;
+        document.getElementById('userScore').textContent = currentUser.score || 0;
+        document.getElementById('userInitial').textContent = currentUser.name.charAt(0).toUpperCase();
+    }
+}
+
+function initializeSocket() {
+    // تنظيف الاتصال القديم إن وجد
+    if (socket) {
+        socket.disconnect();
+        socket.removeAllListeners(); // مهم جداً!
+    }
+    
+    socket = io(API_BASE_URL, {
+        transports: ['websocket'],
+        autoConnect: true,
+        reconnection: true,
+        reconnectionDelay: 1000,   
+        reconnectionAttempts: 5,    
+        timeout: 5000
+    });
+    
+    socket.on('connect', () => {
+        console.log('🟢 Connected to server');
+        
+        // تأكد إن الـ user موجود قبل الإرسال
+        if (currentUser && currentUser._id) {
+            socket.emit('user:online', { salesRepId: currentUser._id });
+        } else {
+            console.warn('Cannot emit user:online - currentUser not available');
         }
     });
-
-    state.socket.on('notification', (message) => {
-        // Add to notifications panel
-        addNotification('System Notification', message, 'success');
-        
-        // Also show as toast
-        showNotification(message, 'success');
+    
+    socket.on('activity:new', (activity) => {
+        console.log('📝 New activity received:', activity);
+        handleNewActivity(activity);
     });
-
-    state.socket.on('disconnect', () => {
-        console.log('Disconnected from server');
-        addNotification('Connection', 'Disconnected from server', 'warning');
+    
+    socket.on('activity:replay', (replayActivities) => {
+        console.log('🔄 Replay activities received:', replayActivities?.length || 0);
+        handleReplayActivities(replayActivities);
+    });
+    
+    socket.on('notification', (message) => {
+        console.log('🔔 Notification received:', message);
+        addNotification(message);
+    });
+    
+    socket.on('disconnect', (reason) => {
+        console.log('🔴 Disconnected from server. Reason:', reason);
+        
+        // في حالة قطع الاتصال من الـ server، حاول تتصل تاني
+        if (reason === 'io server disconnect') {
+            socket.connect();
+        }
+    });
+    
+    // إضافة event listeners للـ reconnection
+    socket.on('reconnect', (attemptNumber) => {
+        console.log('🔄 Reconnected to server after', attemptNumber, 'attempts');
+        
+        // إعادة إرسال user:online بعد الـ reconnection
+        if (currentUser && currentUser._id) {
+            socket.emit('user:online', { salesRepId: currentUser._id });
+        }
+    });
+    
+    socket.on('reconnect_attempt', (attemptNumber) => {
+        console.log('🔄 Attempting to reconnect...', attemptNumber);
+    });
+    
+    socket.on('reconnect_error', (error) => {
+        console.error('❌ Reconnection error:', error);
+    });
+    
+    socket.on('reconnect_failed', () => {
+        console.error('❌ Failed to reconnect to server after maximum attempts');
+        // ممكن تعرضي رسالة للمستخدم هنا
+        addNotification('Connection lost. Please refresh the page.');
+    });
+    
+    socket.on('connect_error', (error) => {
+        console.error('❌ Connection error:', error);
     });
 }
 
 function disconnectSocket() {
-    if (state.socket) {
-        state.socket.disconnect();
-        state.socket = null;
+    if (socket) {
+        socket.removeAllListeners();
+        socket.disconnect();
+        socket = null;
     }
 }
 
-// Authentication
-async function login(name) {
-    try {
-        const response = await api.login(name);
-        if (response) {
-            state.token = response.access_token;
-            state.user = response.salesRep;
-            localStorage.setItem('token', state.token);
-            localStorage.setItem('user', JSON.stringify(state.user));
-            showNotification('Login successful!', 'success');
-            addNotification('Login', `Welcome back, ${state.user.name}!`, 'success');
-            
-            hideLoginOverlay();
-            updateUserInfo();
-            initializeSocket();
-            await loadData();
-        }
-    } catch (error) {
-        showNotification('Login failed', 'error');
-        addNotification('Login Failed', 'Unable to authenticate user', 'error');
+function isSocketConnected() {
+    return socket && socket.connected;
+}
+
+function logout() {
+    console.log('Logging out...');
+    
+    disconnectSocket();
+    
+    localStorage.removeItem('token');
+    localStorage.removeItem('userData');
+    currentUser = null;
+    
+    showLoginModal();
+    clearAppData();
+}
+
+function initializeMap() {
+    const container = document.getElementById('map');
+
+    if (map) {
+        map.remove();
     }
+
+    map = L.map('map').setView([30.0444, 31.2357], 12); // Cairo center
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
 }
 
-async function logout() {
-    try {
-        if (state.token) {
-            await api.logout();
-        }
-    } finally {
-        addNotification('Logout', 'You have been logged out', 'info');
-
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-
-        state.token = null;
-        state.user = null;
-        state.notifications = [];
-        state.replayActivities = [];
-        state.unreadNotifications = 0;
-        state.missedActivities = 0;
-
-        disconnectSocket();
-        showLoginOverlay();
-        updateUserInfo();
-        updateNotificationBadge();
-        updateReplayBadge();
-    }
-}
-
-
-function showLoginOverlay() {
-    document.getElementById('loginOverlay').style.display = 'flex';
-}
-
-function hideLoginOverlay() {
-    document.getElementById('loginOverlay').style.display = 'none';
-}
-
-function updateUserInfo() {
-    const userInfo = document.getElementById('userInfo');
-    const userName = document.getElementById('userName');
-    const userScore = document.getElementById('userScore');
-
-    if (state.user) {
-        userInfo.style.display = 'flex';
-        userName.textContent = state.user.name;
-        userScore.textContent = `Score: ${state.user.score}`;
-    } else {
-        userInfo.style.display = 'none';
-    }
-}
-
-// Data Loading
-async function loadData() {
-    if (!state.token) return;
-
+async function loadInitialData() {
     await Promise.all([
-        loadActivities(),
         loadProperties(),
+        loadActivities(),
         loadSalesReps()
     ]);
-
-    updateDashboard();
+    
+    populatePropertySelects();
+    updateMap();
+    updateActivitiesTable();
+    updateSalesRepsTable();
 }
 
-async function loadActivities() {
-    const activities = await api.getActivities();
-    if (activities) {
-        state.data.activities = activities;
-        renderActivities();
-        renderRecentActivities();
+// Data loading functions
+async function loadProperties() {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE_URL}/property`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        if (response.ok) {
+            properties = await response.json();
+            console.log('Properties loaded:', properties);
+        }
+    } catch (error) {
+        console.error('Error loading properties:', error);
     }
 }
 
-async function loadProperties() {
-    const properties = await api.getProperties();
-    if (properties) {
-        state.data.properties = properties;
-        renderProperties();
-        updatePropertySelects();
+async function loadActivities(filters = {}) {
+    try {
+        const token = localStorage.getItem('token');
+        
+        // Build query string from filters
+        const queryParams = new URLSearchParams();
+        if (filters.activityType) queryParams.append('activityType', filters.activityType);
+        if (filters.propertyId) queryParams.append('propertyId', filters.propertyId);
+        if (filters.salesRepId) queryParams.append('salesRepId', filters.salesRepId);
+        
+        const queryString = queryParams.toString();
+        const url = `${API_BASE_URL}/activities${queryString ? '?' + queryString : ''}`;
+        
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        
+        if (response.ok) {
+            activities = await response.json();
+            console.log('Activities loaded with filters:', filters, activities.length);
+        }
+    } catch (error) {
+        console.error('Error loading activities:', error);
     }
 }
 
 async function loadSalesReps() {
-    const salesReps = await api.getSalesReps();
-    if (salesReps) {
-        state.data.salesReps = salesReps;
-        renderSalesReps();
-        updateSalesRepSelects();
-        updateCurrentUserScore();
-    }
-}
-
-function updateCurrentUserScore() {
-    if (state.user) {
-        const currentUser = state.data.salesReps.find(rep => rep._id === state.user._id);
-        if (currentUser) {
-            state.user.score = currentUser.score;
-            updateUserInfo();
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE_URL}/sales-reps`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        
+        if (response.ok) {
+            salesReps = await response.json();
         }
+    } catch (error) {
+        console.error('Error loading sales reps:', error);
     }
 }
 
-// Dashboard
-function updateDashboard() {
-    document.getElementById('totalActivities').textContent = state.data.activities.length;
-    document.getElementById('totalSalesReps').textContent = state.data.salesReps.length;
-    document.getElementById('currentScore').textContent = state.user ? state.user.score : 0;
+// UI Update functions
+function populatePropertySelects() {
+    const selects = [
+        document.getElementById('filterProperty'),
+        document.getElementById('activityProperty'),
+    ];
+    
+    selects.forEach(select => {
+        // Clear existing options (except first one)
+        while (select.children.length > 1) {
+            select.removeChild(select.lastChild);
+        }
+        
+        properties.forEach(property => {
+            const option = document.createElement('option');
+            option.value = property._id;
+            option.textContent = property.name;
+            select.appendChild(option);
+        });
+    });
+    
+    // Populate sales rep filter
+    const salesRepSelect = document.getElementById('filterSalesRep');
+    while (salesRepSelect.children.length > 1) {
+        salesRepSelect.removeChild(salesRepSelect.lastChild);
+    }
+    
+    salesReps.forEach(rep => {
+        const option = document.createElement('option');
+        option.value = rep._id;
+        option.textContent = rep.name;
+        salesRepSelect.appendChild(option);
+    });
 }
 
-function renderRecentActivities() {
-    const container = document.getElementById('recentActivitiesMap');
-
-    if (state.recentMap) {
-        state.recentMap.remove();
-        state.recentMap = null;
-    }
-
-    const map = L.map('recentActivitiesMap').setView([30.0444, 31.2357], 12); // Cairo center
-    state.recentMap = map; 
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    const legendContainer = document.getElementById('mapLegend');
-    legendContainer.innerHTML = `
-        <div><i class="fas fa-home" style="color:blue"></i> Visit</div>
-        <div><i class="fas fa-phone" style="color:green"></i> Call</div>
-        <div><i class="fas fa-search" style="color:orange"></i> Inspection</div>
-        <div><i class="fas fa-redo" style="color:purple"></i> Follow-up</div>
-        <div><i class="fas fa-sticky-note" style="color:brown"></i> Note</div>
-        <div><i class="fas fa-map-marker-alt" style="color:red"></i> Replay Activity</div>
-    `;
-
-    state.data.properties.forEach(property => {
-        if (property?.location?.lat != null && property?.location?.lng != null) {
-            L.marker([property.location.lat, property.location.lng], {
-                icon: L.icon({
-                    iconUrl: 'https://cdn-icons-png.flaticon.com/512/854/854878.png',
-                    iconSize: [25, 25],
-                })
-            }).addTo(map).bindPopup(`<strong>${property.name}</strong><br>${property.address}`);
+function updateMap() {
+    // Clear existing markers
+    map.eachLayer((layer) => {
+        if (layer instanceof L.Marker) {
+            map.removeLayer(layer);
         }
     });
-
-    const recentActivities = state.data.activities
-        .filter(a => a.location?.lat != null && a.location?.lng != null)
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .slice(0, 10);
-
-    recentActivities.forEach(activity => {
-        const icon = getMapIcon(activity.activityType);
-        const marker = L.marker([activity.location.lat, activity.location.lng], { icon });
-
+    
+    // Add property markers
+    // properties.forEach(property => {
+    //     if (property.location) {
+    //         L.marker([property.location.lat, property.location.lng])
+    //             .addTo(map)
+    //             .bindPopup(`<strong>${property.name}</strong><br>${property.address}`);
+    //     }
+    // });
+    
+    // Add activity markers
+    activities.forEach(activity => {
+    if (activity.location) {
+        const activityClass = `activity-${activity.activityType}`;
+        
+        const activityColor = activityColors[activity.activityType] || '#6b7280'; 
+        
+        const marker = L.circleMarker([activity.location.lat, activity.location.lng], {
+            radius: 8,
+            className: activityClass,
+            fillColor: activityColor,    
+            fillOpacity: 0.8,
+            stroke: true,
+            weight: 2,
+            color: activityColor,       
+            opacity: 1
+        }).addTo(map);
+        
         const popupContent = `
-            <strong>Type:</strong> ${activity.activityType}<br>
-            <strong>Property:</strong> ${activity.propertyId?.name}<br>
-            <strong>Rep:</strong> ${activity.salesRepId?.name}<br>
-            <strong>Time:</strong> ${formatDateTime(activity.timestamp)}
+            <strong>${activity.activityType.charAt(0).toUpperCase() + activity.activityType.slice(1)}</strong><br>
+            Property: ${activity.propertyId?.name || 'Unknown'}<br>
+            Sales Rep: ${activity.salesRepId?.name || 'Unknown'}<br>
+            Date: ${new Date(activity.timestamp).toLocaleDateString()}<br>
+            ${activity.note ? `Note: ${activity.note}` : ''}
         `;
+        
+        marker.bindPopup(popupContent);
+    }
+});
+}
 
-        marker.bindPopup(popupContent).addTo(map);
-    });
-
-    (state.replayActivities || []).forEach(activity => {
-        if (activity?.location?.lat != null && activity?.location?.lng != null) {
-            const marker = L.marker([activity.location.lat, activity.location.lng], {
-                icon: L.icon({
-                    iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 30],
-                })
-            });
-
-            const popup = `
-                <strong><span style="color:red;">Missed Activity</span></strong><br>
-                <strong>Type:</strong> ${activity.activityType}<br>
-                <strong>Property:</strong> ${activity.propertyId?.name}<br>
-                <strong>Rep:</strong> ${activity.salesRepId?.name}<br>
-                <strong>Time:</strong> ${formatDateTime(activity.timestamp)}
-            `;
-
-            marker.bindPopup(popup).addTo(map);
-        }
+function updateActivitiesTable() {
+    const tbody = document.getElementById('activitiesTableBody');
+    tbody.innerHTML = '';
+    
+    const filteredActivities = getFilteredActivities();
+    
+    filteredActivities.forEach(activity => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${getActivityColor(activity.activityType)}-100 text-${getActivityColor(activity.activityType)}-800">
+                    ${activity.activityType.charAt(0).toUpperCase() + activity.activityType.slice(1)}
+                </span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                ${activity.propertyId?.name || 'Unknown'}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                ${activity.salesRepId?.name || 'Unknown'}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                ${new Date(activity.timestamp).toLocaleString()}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                ${activity.weight}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <button class="text-blue-600 hover:text-blue-900 mr-3" onclick="editActivity('${activity._id}')">Edit</button>
+                <button class="text-red-600 hover:text-red-900" onclick="deleteActivity('${activity._id}')">Delete</button>
+            </td>
+        `;
+        tbody.appendChild(row);
     });
 }
 
-
-
-// Activities Management
-function renderActivities() {
-    const container = document.getElementById('activitiesList');
+function updateSalesRepsTable() {
+    const tbody = document.getElementById('salesRepsTableBody');
+    tbody.innerHTML = '';
     
-    if (state.data.activities.length === 0) {
-        container.innerHTML = '<div class="empty-state"><i class="fas fa-clipboard-list"></i><p>No activities found</p></div>';
+    let onlineCount = 0;
+    let offlineCount = 0;
+    console.log(salesReps);
+    salesReps.forEach(rep => {
+        if (rep.isOnline) onlineCount++;
+        else offlineCount++;
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0 h-10 w-10">
+                        <div class="h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center">
+                            <span class="text-white font-medium">${rep.name.charAt(0).toUpperCase()}</span>
+                        </div>
+                    </div>
+                    <div class="ml-4">
+                        <div class="text-sm font-medium text-gray-900">${rep.name}</div>
+                    </div>
+                </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${rep.isOnline ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
+                    <span class="w-2 h-2 mr-1.5 rounded-full ${rep.isOnline ? 'bg-green-400' : 'bg-gray-400'}"></span>
+                    ${rep.isOnline ? 'Online' : 'Offline'}
+                </span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                ${rep.score || 0}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                ${rep.lastOnline ? new Date(rep.lastOnline).toLocaleString() : 'Never'}
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+    
+    // Update stats
+    document.getElementById('onlineCount').textContent = onlineCount;
+    document.getElementById('offlineCount').textContent = offlineCount;
+    document.getElementById('totalCount').textContent = salesReps.length;
+}
+
+// Activity management
+function showAddActivityModal() {
+    document.getElementById('addActivityModal').classList.remove('hidden');
+    // Set current date/time
+    // const now = new Date();
+    // now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    // document.getElementById('activityDateTime').value = now.toISOString().slice(0, 16);
+}
+
+function hideAddActivityModal() {
+    document.getElementById('addActivityModal').classList.add('hidden');
+    document.getElementById('addActivityForm').reset();
+}
+
+async function handleAddActivity(e) {
+    e.preventDefault();
+    
+    const propertyId = document.getElementById('activityProperty').value;
+    const activityType = document.getElementById('activityType').value;
+    // const timestamp = document.getElementById('activityDateTime').value;
+    const note = document.getElementById('activityNote').value;
+    
+    // Get property location for the activity
+    const property = properties.find(p => p._id === propertyId);
+    if (!property || !property.location) {
+        alert('Selected property does not have location data');
         return;
     }
-
-    const tableHTML = `
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Type</th>
-                    <th>Property</th>
-                    <th>Sales Rep</th>
-                    <th>Date</th>
-                    <th>Points</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${state.data.activities.map(activity => `
-                    <tr>
-                        <td>
-                            <span class="activity-type ${activity.activityType}">
-                                <i class="fas ${getActivityIcon(activity.activityType)}"></i>
-                                ${activity.activityType}
-                            </span>
-                        </td>
-                        <td>${activity.propertyId.name}</td>
-                        <td>${activity.salesRepId.name}</td>
-                        <td>${formatDateTime(activity.timestamp)}</td>
-                        <td><strong>${activity.weight}</strong></td>
-                        <td>
-                            <div class="action-buttons">
-                                <button class="action-btn edit" onclick="editActivity('${activity._id}')">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="action-btn delete" onclick="deleteActivity('${activity._id}')">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
-
-    container.innerHTML = tableHTML;
-}
-
-function getMapIcon(type) {
-    const colors = {
-        visit: 'blue',
-        call: 'green',
-        inspection: 'orange',
-        'follow-up': 'purple',
-        note: 'brown',
-    };
-
-    const color = colors[type] || 'gray';
-
-    return L.divIcon({
-        html: `<i class="fas ${getActivityIcon(type)}" style="color:${color}; font-size: 20px;"></i>`,
-        iconSize: [25, 25],
-        className: 'map-icon'
-    });
-}
-
-
-async function createActivity(formData) {
-    const data = {
-        propertyId: formData.get('propertyId'),
-        activityType: formData.get('activityType'),
-        timestamp: new Date(),
-        location: {
-            lat: parseFloat(formData.get('lat')) || 0,
-            lng: parseFloat(formData.get('lng')) || 0
-        },
-        note: formData.get('note') || undefined
-    };
-
-    const response = await api.createActivity(data);
-    if (response) {
-        // showNotification('Activity created successfully!', 'success');
-        // addNotification('Activity Created', `${data.activityType} activity created successfully`, 'success');
-        closeModal('activityModal');
-        await loadData();
-    }
-}
-
-async function deleteActivity(id) {
-    if (confirm('Are you sure you want to delete this activity?')) {
-        const response = await api.deleteActivity(id);
-        if (response) {
-            showNotification('Activity deleted successfully!', 'success');
-            addNotification('Activity Deleted', 'Activity has been removed', 'info');
-            await loadData();
-        }
-    }
-}
-
-// Properties Management
-function renderProperties() {
-    const container = document.getElementById('propertiesList');
     
-    if (state.data.properties.length === 0) {
-        container.innerHTML = '<div class="empty-state"><i class="fas fa-building"></i><p>No properties found</p></div>';
-        return;
-    }
-
-    const tableHTML = `
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Address</th>
-                    <th>Location</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${state.data.properties.map(property => `
-                    <tr>
-                        <td><strong>${property.name}</strong></td>
-                        <td>${property?.address}</td>
-                        <td>${property?.lat?.toFixed(4)}, ${property?.lng?.toFixed(4)}</td>
-                        <td>
-                            <div class="action-buttons">
-                                <button class="action-btn edit" onclick="editProperty('${property._id}')">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="action-btn delete" onclick="deleteProperty('${property._id}')">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
-
-    container.innerHTML = tableHTML;
-}
-
-async function createProperty(formData) {
-    const data = {
-        propertyName: formData.get('propertyName'),
-        address: formData.get('address'),
-        location: {
-            lat: parseFloat(formData.get('lat')),
-            lng: parseFloat(formData.get('lng'))
-        }
+    const activityData = {
+        propertyId,
+        activityType,
+        note: note || undefined
     };
-
-    const response = await api.createProperty(data);
-    if (response) {
-        showNotification('Property created successfully!', 'success');
-        addNotification('Property Created', `${data.propertyName} has been added`, 'success');
-        await loadData();
-    }
-}
-
-async function deleteProperty(id) {
-    if (confirm('Are you sure you want to delete this property?')) {
-        const response = await api.deleteProperty(id);
-        if (response) {
-            showNotification('Property deleted successfully!', 'success');
-            addNotification('Property Deleted', 'Property has been removed', 'info');
-            await loadData();
-        }
-    }
-}
-
-// Sales Reps Management
-function renderSalesReps() {
-    const container = document.getElementById('salesRepsList');
     
-    if (state.data.salesReps.length === 0) {
-        container.innerHTML = '<div class="empty-state"><i class="fas fa-users"></i><p>No sales reps found</p></div>';
-        return;
-    }
-
-    const tableHTML = `
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th>Score</th>
-                    <th>Last Online</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${state.data.salesReps
-                    .filter(rep => rep._id !== state.user._id)
-                    .map(rep => `
-                    <tr>
-                        <td><strong>${rep.name}</strong></td>
-                        <td>
-                            <span class="status-badge ${rep.isOnline ? 'online' : 'offline'}">
-                                ${rep.isOnline ? 'Online' : 'Offline'}
-                            </span>
-                        </td>
-                        <td><strong>${rep.score}</strong></td>
-                        <td>${rep.lastOnline ? formatDateTime(rep.lastOnline) : 'Never'}</td>
-                        <td>
-                            <div class="action-buttons">
-                                <button class="action-btn edit" onclick="editSalesRep('${rep._id}')">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="action-btn delete" onclick="deleteSalesRep('${rep._id}')">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
-
-    container.innerHTML = tableHTML;
-}
-
-async function createSalesRep(formData) {
-    const data = {
-        name: formData.get('name')
-    };
-
-    const response = await api.createSalesRep(data);
-    if (response) {
-        showNotification('Sales rep created successfully!', 'success');
-        addNotification('Sales Rep Created', `${data.name} has been added to the team`, 'success');
-        closeModal('salesRepModal');
-        await loadData();
-    }
-}
-
-async function deleteSalesRep(id) {
-    if (confirm('Are you sure you want to delete this sales rep?')) {
-        const response = await api.deleteSalesRep(id);
-        if (response) {
-            showNotification('Sales rep deleted successfully!', 'success');
-            addNotification('Sales Rep Deleted', 'Sales representative has been removed', 'info');
-            await loadData();
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE_URL}/activities`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(activityData),
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            hideAddActivityModal();
+            // Refresh data
+            await loadActivities();
+            await loadSalesReps(); // Refresh to get updated scores
+            updateActivitiesTable();
+            updateSalesRepsTable();
+            updateMap();
+            updateUserInfo();
+        } else {
+            const error = await response.json();
+            alert('Failed to add activity: ' + (error.message || 'Unknown error'));
         }
+    } catch (error) {
+        console.error('Error adding activity:', error);
+        alert('Failed to add activity. Please check your connection.');
     }
 }
 
-// UI Helpers
-function updatePropertySelects() {
-    const selects = document.querySelectorAll('#activityProperty');
-    selects.forEach(select => {
-        const currentValue = select.value;
-        select.innerHTML = '<option value="">Select Property</option>' +
-            state.data.properties.map(property => 
-                `<option value="${property._id}">${property.name}</option>`
-            ).join('');
-        if (currentValue) select.value = currentValue;
-    });
+// Filtering
+function getFilteredActivities() {
+    return activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 }
 
-function updateSalesRepSelects() {
-    const selects = document.querySelectorAll('#salesRepFilter');
-    selects.forEach(select => {
-        const currentValue = select.value;
-        select.innerHTML = '<option value="">All Sales Reps</option>' +
-            state.data.salesReps.map(rep => 
-                `<option value="${rep._id}">${rep.name}</option>`
-            ).join('');
-        if (currentValue) select.value = currentValue;
-    });
+async function filterActivities() {
+    const typeFilter = document.getElementById('filterType').value;
+    const propertyFilter = document.getElementById('filterProperty').value;
+    const salesRepFilter = document.getElementById('filterSalesRep').value;
+    
+    const filters = {};
+    if (typeFilter) filters.activityType = typeFilter;
+    if (propertyFilter) filters.propertyId = propertyFilter;
+    if (salesRepFilter) filters.salesRepId = salesRepFilter;
+    
+    console.log('Applying filters:', filters);
+    
+    // Load activities with filters from backend
+    await loadActivities(filters);
+    
+    // Update UI
+    updateActivitiesTable();
+    updateMap();
 }
 
-function getActivityIcon(type) {
-    const icons = {
-        visit: 'fa-home',
-        call: 'fa-phone',
-        inspection: 'fa-search',
-        'follow-up': 'fa-redo',
-        note: 'fa-sticky-note'
-    };
-    return icons[type] || 'fa-clipboard';
-}
-
-function formatTime(dateString) {
-    return new Date(dateString).toLocaleTimeString();
-}
-
-function formatDateTime(dateString) {
-    return new Date(dateString).toLocaleString();
-}
-
-// Tab Management
+// Tab navigation
 function switchTab(tabName) {
+    // Update tab buttons
     document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.remove('active');
+        btn.classList.remove('border-blue-500', 'text-blue-600');
+        btn.classList.add('border-transparent', 'text-gray-500');
     });
-    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
-
+    
+    document.querySelector(`[data-tab="${tabName}"]`).classList.remove('border-transparent', 'text-gray-500');
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('border-blue-500', 'text-blue-600');
+    
+    // Update tab content
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.remove('active');
     });
+    
     document.getElementById(tabName).classList.add('active');
-
-    state.currentTab = tabName;
-}
-
-// Modal Management
-function openModal(modalId) {
-    document.getElementById(modalId).classList.add('show');
-}
-
-function closeModal(modalId) {
-    document.getElementById(modalId).classList.remove('show');
-    const form = document.querySelector(`#${modalId} form`);
-    if (form) form.reset();
-}
-
-// Notifications (Toast notifications)
-function showNotification(message, type = 'info') {
-    const container = document.getElementById('notifications');
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.innerHTML = `
-        <strong>${type.charAt(0).toUpperCase()}${type.slice(1)} </strong>
-        <div>${message}</div>
-    `;
     
-    container.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.remove();
-    }, 5000);
+    // Refresh map if switching to dashboard
+    if (tabName === 'dashboard' && map) {
+        setTimeout(() => map.invalidateSize(), 100);
+    }
 }
 
-// Event Listeners
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize state
-    initializeState();
+// Notifications
+function toggleNotificationPanel() {
+    const panel = document.getElementById('notificationPanel');
+    panel.classList.toggle('hidden');
     
-    // Check if user is already logged in (in this case, always show login)
-    // Check if user is already logged in
-const savedToken = localStorage.getItem('token');
-const savedUser = localStorage.getItem('user');
-
-if (savedToken && savedUser) {
-    state.token = savedToken;
-    state.user = JSON.parse(savedUser);
-    updateUserInfo();
-    initializeSocket();
-    loadData();
-    hideLoginOverlay();
-} else {
-    showLoginOverlay();
+    if (!panel.classList.contains('hidden')) {
+        updateNotificationPanel();
+    }
 }
 
+function hideNotificationPanel() {
+    document.getElementById('notificationPanel').classList.add('hidden');
+}
 
-    // Login form
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const name = document.getElementById('salesRepName').value;
-        await login(name);
+function addNotification(message) {
+    notifications.unshift({
+        id: Date.now(),
+        message,
+        timestamp: new Date(),
+        read: false
     });
-
-    // Logout button
-    document.getElementById('logoutBtn').addEventListener('click', logout);
-
-    // Notification and Replay buttons
-    document.getElementById('notificationBtn').addEventListener('click', toggleNotificationPanel);
-    document.getElementById('replayBtn').addEventListener('click', toggleReplayPanel);
-
-    // Tab navigation
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            switchTab(btn.getAttribute('data-tab'));
+    
+    updateNotificationBadge();
+    
+    // Show browser notification if permission granted
+    if (Notification.permission === 'granted') {
+        new Notification('Property Activity Tracker', {
+            body: message,
+            icon: '/favicon.ico'
         });
-    });
+    }
+}
 
-    // Modal controls
-    document.querySelectorAll('.close-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const modal = e.target.closest('.modal');
-            closeModal(modal.id);
+function updateNotificationBadge() {
+    const unreadCount = notifications.filter(n => !n.read).length;
+    const badge = document.getElementById('notificationBadge');
+    
+    if (unreadCount > 0) {
+        badge.textContent = unreadCount;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+function updateNotificationPanel() {
+    const list = document.getElementById('notificationList');
+    list.innerHTML = '';
+    
+    if (notifications.length === 0) {
+        list.innerHTML = '<div class="p-4 text-center text-gray-500">No notifications</div>';
+        return;
+    }
+    
+    notifications.forEach(notification => {
+        const item = document.createElement('div');
+        item.className = `p-4 border-b border-gray-200 ${!notification.read ? 'bg-blue-50' : ''}`;
+        item.innerHTML = `
+            <p class="text-sm text-gray-900">${notification.message}</p>
+            <p class="text-xs text-gray-500 mt-1">${notification.timestamp.toLocaleString()}</p>
+        `;
+        
+        item.addEventListener('click', () => {
+            notification.read = true;
+            updateNotificationBadge();
+            updateNotificationPanel();
         });
+        
+        list.appendChild(item);
     });
+}
 
-    // New item buttons
-    document.getElementById('newActivityBtn').addEventListener('click', () => openModal('activityModal'));
-    document.getElementById('newSalesRepBtn').addEventListener('click', () => openModal('salesRepModal'));
+// Replay functionality
+function handleReplay() {
+    if (socket) {
+        socket.emit('user:online', { salesRepId: currentUser._id });
+        addNotification('Requesting missed activities...');
+    }
+}
 
-    // Cancel buttons
-    document.getElementById('cancelActivity').addEventListener('click', () => closeModal('activityModal'));
-    document.getElementById('cancelSalesRep').addEventListener('click', () => closeModal('salesRepModal'));
-
-    // Form submissions
-    document.getElementById('activityForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        await createActivity(formData);
-    });
-
-    document.getElementById('propertyForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        await createProperty(formData);
-    });
-
-    document.getElementById('salesRepForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        await createSalesRep(formData);
-    });
-
-    // Filters
-    document.getElementById('activityTypeFilter').addEventListener('change', async (e) => {
-        const type = e.target.value;
-        const repId = document.getElementById('salesRepFilter').value;
-        const activities = await api.getActivities({ activityType: type, salesRepId: repId });
-        if (activities) {
-            state.data.activities = activities;
-            renderActivities();
-        }
-    });
-
-    document.getElementById('salesRepFilter').addEventListener('change', async (e) => {
-        const repId = e.target.value;
-        const type = document.getElementById('activityTypeFilter').value;
-        const activities = await api.getActivities({ activityType: type, salesRepId: repId });
-        if (activities) {
-            state.data.activities = activities;
-            renderActivities();
-        }
-    });
-
-    // Close modals and panels when clicking outside
-    document.querySelectorAll('.modal').forEach(modal => {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeModal(modal.id);
+function handleReplayActivities(replayActivities) {
+    if (replayActivities.length > 0) {
+        addNotification(`Received ${replayActivities.length} missed activities`);
+        
+        // Add missed activities to current activities
+        replayActivities.forEach(activity => {
+            const existingIndex = activities.findIndex(a => a._id === activity._id);
+            if (existingIndex === -1) {
+                activities.push(activity);
             }
         });
-    });
-
-    // Close panels when clicking outside
-    document.addEventListener('click', (e) => {
-        const notificationPanel = document.getElementById('notificationPanel');
-        const replayPanel = document.getElementById('replayPanel');
-        const notificationBtn = document.getElementById('notificationBtn');
-        const replayBtn = document.getElementById('replayBtn');
         
-        if (!notificationPanel.contains(e.target) && !notificationBtn.contains(e.target)) {
-            notificationPanel.style.display = 'none';
-        }
-        
-        if (!replayPanel.contains(e.target) && !replayBtn.contains(e.target)) {
-            replayPanel.style.display = 'none';
-        }
-    });
-});
+        // Update UI
+        updateActivitiesTable();
+        updateMap();
+    } else {
+        addNotification('No missed activities');
+    }
+}
 
-// Helper function for form data
-FormData.prototype.get = function(name) {
-    const value = this.getAll(name)[0];
-    return value || null;
-};
+function handleNewActivity(activity) {
+    // Add to activities list if not already present
+    const existingIndex = activities.findIndex(a => a._id === activity._id);
+    if (existingIndex === -1) {
+        activities.unshift(activity);
+    } else {
+        activities[existingIndex] = activity;
+    }
+    
+    // Update UI
+    updateActivitiesTable();
+    updateMap();
+    
+    // Add notification
+    const message = `New ${activity.activityType} activity by ${activity.salesRepId?.name || 'Unknown'} at ${activity.propertyId?.name || 'Unknown property'}`;
+    addNotification(message);
+}
+
+// Utility functions
+function getActivityColor(activityType) {
+    const colors = {
+        visit: 'green',
+        call: 'blue',
+        inspection: 'yellow',
+        'follow-up': 'purple',
+        note: 'gray'
+    };
+    return colors[activityType] || 'gray';
+}
+
+async function editActivity(activityId) {
+    // Implement edit functionality
+    alert('Edit functionality not implemented yet');
+}
+
+async function deleteActivity(activityId) {
+    if (!confirm('Are you sure you want to delete this activity?')) {
+        return;
+    }
+    
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        
+        if (response.ok) {
+            // Remove from local array
+            activities = activities.filter(a => a._id !== activityId);
+            updateActivitiesTable();
+            updateMap();
+        } else {
+            alert('Failed to delete activity');
+        }
+    } catch (error) {
+        console.error('Error deleting activity:', error);
+        alert('Failed to delete activity. Please check your connection.');
+    }
+}
+
+// Request notification permission on load
+if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+}

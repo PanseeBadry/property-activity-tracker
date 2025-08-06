@@ -96,6 +96,6 @@ Delivered to all users via WebSocket in real-time.
 ### 📥 Installation
 
 ```bash
-git clone https://github.com/<your-username>/property-activity-tracker.git
+git clone https://github.com/PanseeBadry/property-activity-tracker.git
 cd property-activity-tracker
 npm install

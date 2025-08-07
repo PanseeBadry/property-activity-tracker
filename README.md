@@ -1,5 +1,12 @@
 # 🗺️ Property Activity Tracker – Backend API
 
+## 🔗 Demo & API Docs
+
+- 🔴 **Live Demo**: [View Demo](https://drive.google.com/file/d/1x6aERpvs2IIpfVvjF7m6x8p358xaYpXM/view?usp=sharing)
+- 📘 **Swagger Docs**: [API Documentation](http://localhost:3000/api)
+
+---
+
 A real-time backend system for tracking, replaying, and broadcasting property-related activities performed by sales representatives. Built using **NestJS** and **MongoDB**.
 
 ---

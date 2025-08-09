@@ -11,15 +11,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [
-    PassportModule,
-    ConfigModule,
+    PassportModule, // Passport is the underlying library that handles authentication strategies (JWT, local, Google, etc.). AuthGuard('jwt') depends on the Passport infrastructure.
     JwtModule.registerAsync({
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'),
         signOptions: { expiresIn: '1d' },
       }),
       inject: [ConfigService],
-    }),
+    }), // register JWT module with async configuration
 
     MongooseModule.forFeature([
       { name: SalesRep.name, schema: SalesRepSchema },

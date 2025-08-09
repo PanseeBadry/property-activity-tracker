@@ -88,6 +88,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     this.repConnections.get(salesRepId)?.add(client.id);
+    // console.log('repConnections', this.repConnections);
 
     console.log(`SalesRep is online: ${salesRepId} (${client.id})`);
   }

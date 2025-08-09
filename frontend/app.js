@@ -64,7 +64,7 @@ function setupEventListeners() {
     // Activity filters
     document.getElementById('filterType').addEventListener('change', filterActivities);
     document.getElementById('filterProperty').addEventListener('change', filterActivities);
-        document.getElementById('filterSalesRep').addEventListener('change', filterActivities);
+    document.getElementById('filterSalesRep').addEventListener('change', filterActivities);
 
     
     // Close modals when clicking outside
@@ -196,22 +196,22 @@ function initializeSocket() {
     });
     
     socket.on('activity:new', (activity) => {
-        console.log('📝 New activity received:', activity);
+        console.log('New activity received:', activity);
         handleNewActivity(activity);
     });
     
     socket.on('activity:replay', (replayActivities) => {
-        console.log('🔄 Replay activities received:', replayActivities?.length || 0);
+        console.log('Replay activities received:', replayActivities?.length || 0);
         handleReplayActivities(replayActivities);
     });
     
     socket.on('notification', (message) => {
-        console.log('🔔 Notification received:', message);
+        console.log('Notification received:', message);
         addNotification(message);
     });
     
     socket.on('disconnect', (reason) => {
-        console.log('🔴 Disconnected from server. Reason:', reason);
+        console.log('Disconnected from server. Reason:', reason);
         
         if (reason === 'io server disconnect') {
             socket.connect();
@@ -219,7 +219,7 @@ function initializeSocket() {
     });
     
     socket.on('reconnect', (attemptNumber) => {
-        console.log('🔄 Reconnected to server after', attemptNumber, 'attempts');
+        console.log('Reconnected to server after', attemptNumber, 'attempts');
         
         if (currentUser && currentUser._id) {
             socket.emit('user:online', { salesRepId: currentUser._id });
@@ -227,20 +227,20 @@ function initializeSocket() {
     });
     
     socket.on('reconnect_attempt', (attemptNumber) => {
-        console.log('🔄 Attempting to reconnect...', attemptNumber);
+        console.log('Attempting to reconnect...', attemptNumber);
     });
     
     socket.on('reconnect_error', (error) => {
-        console.error('❌ Reconnection error:', error);
+        console.error('Reconnection error:', error);
     });
     
     socket.on('reconnect_failed', () => {
-        console.error('❌ Failed to reconnect to server after maximum attempts');
+        console.error('Failed to reconnect to server after maximum attempts');
         addNotification('Connection lost. Please refresh the page.');
     });
     
     socket.on('connect_error', (error) => {
-        console.error('❌ Connection error:', error);
+        console.error('Connection error:', error);
     });
 }
 

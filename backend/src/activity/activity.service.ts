@@ -15,6 +15,7 @@ const WEIGHT_MAP = {
   'follow-up': 4,
   note: 1,
 };
+let flag = false;
 
 @Injectable()
 export class ActivityService {
@@ -56,11 +57,11 @@ export class ActivityService {
     if (!rep) throw new Error('SalesRep not found');
 
     this.socketGateway.broadcastNewActivity(populatedActivity);
-
-    if (rep.score >= 100) {
+    if (rep.score >= 100 && !flag) {
       this.socketGateway.broadcastNotification(
         `${rep.name} reached 100 points!`,
       );
+      flag = true;
     }
 
     if (weight >= 8) {

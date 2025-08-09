@@ -26,11 +26,11 @@ import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 @ApiUnauthorizedResponse({
   description: 'Unauthorized - Valid JWT token required',
 })
-@UseGuards(JwtAuthGuard)
 @Controller('sales-reps')
 export class SalesRepController {
   constructor(private readonly salesRepService: SalesRepService) {}
 
+  @UseGuards(JwtAuthGuard)
   @Get()
   @ApiOperation({
     summary: 'Get all sales representatives',
@@ -56,6 +56,7 @@ export class SalesRepController {
     return this.salesRepService.findAll();
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
   @ApiOperation({
     summary: 'Get sales representative by ID',
@@ -109,6 +110,7 @@ export class SalesRepController {
     return this.salesRepService.create(dto);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Put(':id')
   @ApiOperation({
     summary: 'Update sales representative',
@@ -139,6 +141,7 @@ export class SalesRepController {
     return this.salesRepService.update(id, dto);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete sales representative',
